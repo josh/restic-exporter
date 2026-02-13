@@ -587,12 +587,17 @@ func main() {
 	cfg := loadConfig()
 
 	verbose := flag.Bool("verbose", false, "Enable debug logging")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	refreshInterval := flag.Int("refresh-interval", cfg.RefreshInterval, "Seconds between metric refreshes")
 	listenAddress := flag.String("listen-address", cfg.ListenAddress, "Address to listen on")
 	listenPort := flag.Int("listen-port", cfg.ListenPort, "Port to listen on")
 	noCheck := flag.Bool("no-check", cfg.NoCheck, "Disable repository health checks")
 	includePaths := flag.Bool("include-paths", cfg.IncludePaths, "Include snapshot paths in labels")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	cfg.RefreshInterval = *refreshInterval
 	cfg.ListenAddress = *listenAddress
