@@ -1,0 +1,8 @@
+[Unit]
+Description=Prometheus Restic Exporter
+
+[Socket]
+ListenStream=9183
+
+[Install]
+WantedBy=sockets.target

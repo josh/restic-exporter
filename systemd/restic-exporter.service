@@ -1,0 +1,9 @@
+[Unit]
+Description=Prometheus Restic Exporter
+Documentation=https://github.com/josh/restic-exporter
+Requires=restic-exporter.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/restic-exporter
+DynamicUser=true
