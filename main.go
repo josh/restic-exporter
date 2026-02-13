@@ -217,7 +217,9 @@ func getLocks() (int, error) {
 }
 
 func calcSnapshotHash(hostname, username string, paths []string) string {
-	text := hostname + username + strings.Join(paths, ",")
+	normalized := append([]string(nil), paths...)
+	sort.Strings(normalized)
+	text := hostname + username + strings.Join(normalized, ",")
 	h := sha256.Sum256([]byte(text))
 	return fmt.Sprintf("%x", h)
 }
@@ -409,15 +411,19 @@ func updateResticMetrics(cfg config) error {
 	for _, h := range hashes {
 		sm := deduped[h]
 		snap := sm.snap
+		paths := append([]string(nil), snap.Paths...)
+		sort.Strings(paths)
+		tagsList := append([]string(nil), snap.Tags...)
+		sort.Strings(tagsList)
 
 		tag := ""
-		if len(snap.Tags) > 0 {
-			tag = snap.Tags[0]
+		if len(tagsList) > 0 {
+			tag = tagsList[0]
 		}
-		tags := strings.Join(snap.Tags, ",")
-		paths := ""
+		tags := strings.Join(tagsList, ",")
+		pathsLabel := ""
 		if cfg.IncludePaths {
-			paths = strings.Join(snap.Paths, ",")
+			pathsLabel = strings.Join(paths, ",")
 		}
 
 		c := resticClient{
@@ -427,7 +433,7 @@ func updateResticMetrics(cfg config) error {
 			hash:          h,
 			tag:           tag,
 			tags:          tags,
-			paths:         paths,
+			paths:         pathsLabel,
 			snapshotCount: snapCounter[h],
 			timestamp:     sm.timestamp,
 		}
