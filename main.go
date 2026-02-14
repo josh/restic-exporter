@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -631,20 +632,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := updateResticMetrics(cfg); err != nil {
-		slog.Error("Unable to collect metrics from Restic", "error", err)
-	}
-
+	var ready atomic.Bool
 	go func() {
-		for range time.Tick(time.Duration(cfg.RefreshInterval) * time.Second) {
+		ticker := time.NewTicker(time.Duration(cfg.RefreshInterval) * time.Second)
+		defer ticker.Stop()
+		for {
 			slog.Info("Refreshing stats", "interval_seconds", cfg.RefreshInterval)
 			if err := updateResticMetrics(cfg); err != nil {
 				slog.Error("Unable to collect metrics from Restic", "error", err)
 			}
+			ready.Store(true)
+			<-ticker.C
 		}
 	}()
 
-	http.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{Registry: registry}))
+	metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{Registry: registry})
+	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		if !ready.Load() {
+			http.Error(w, "Collecting initial metrics", http.StatusServiceUnavailable)
+			return
+		}
+		metricsHandler.ServeHTTP(w, r)
+	})
 
 	var ln net.Listener
 	var err error
