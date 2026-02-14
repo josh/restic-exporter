@@ -20,6 +20,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/expfmt"
 )
 
 var (
@@ -33,6 +34,7 @@ type config struct {
 	ListenPort      int
 	NoCheck         bool
 	IncludePaths    bool
+	Output          string
 }
 
 func parseBoolEnv(name string, defaultVal bool) bool {
@@ -74,6 +76,7 @@ func loadConfig() config {
 		ListenPort:      listenPort,
 		NoCheck:         parseBoolEnv("NO_CHECK", false),
 		IncludePaths:    parseBoolEnv("INCLUDE_PATHS", false),
+		Output:          os.Getenv("OUTPUT"),
 	}
 }
 
@@ -584,6 +587,19 @@ func activationListener() (net.Listener, error) {
 	return ln, nil
 }
 
+func writeToStdout(g prometheus.Gatherer) error {
+	mfs, err := g.Gather()
+	if err != nil {
+		return err
+	}
+	for _, mf := range mfs {
+		if _, err := expfmt.MetricFamilyToText(os.Stdout, mf); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func main() {
 	cfg := loadConfig()
 
@@ -594,6 +610,7 @@ func main() {
 	listenPort := flag.Int("listen-port", cfg.ListenPort, "Port to listen on")
 	noCheck := flag.Bool("no-check", cfg.NoCheck, "Disable repository health checks")
 	includePaths := flag.Bool("include-paths", cfg.IncludePaths, "Include snapshot paths in labels")
+	output := flag.String("output", cfg.Output, "Write metrics to file and exit (use - for stdout)")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
@@ -605,6 +622,7 @@ func main() {
 	cfg.ListenPort = *listenPort
 	cfg.NoCheck = *noCheck
 	cfg.IncludePaths = *includePaths
+	cfg.Output = *output
 
 	var level slog.Level
 	if *verbose {
@@ -630,6 +648,25 @@ func main() {
 	if os.Getenv("NO_STATS") != "" {
 		slog.Error("The environment variable NO_STATS was removed in version 2.0.0. Checkout the changelog.")
 		os.Exit(1)
+	}
+
+	if cfg.Output != "" {
+		if err := updateResticMetrics(cfg); err != nil {
+			slog.Error("Failed to collect metrics", "error", err)
+			os.Exit(1)
+		}
+		if cfg.Output == "-" {
+			if err := writeToStdout(registry); err != nil {
+				slog.Error("Failed to write metrics to stdout", "error", err)
+				os.Exit(1)
+			}
+		} else {
+			if err := prometheus.WriteToTextfile(cfg.Output, registry); err != nil {
+				slog.Error("Failed to write metrics to file", "path", cfg.Output, "error", err)
+				os.Exit(1)
+			}
+		}
+		return
 	}
 
 	var ready atomic.Bool
