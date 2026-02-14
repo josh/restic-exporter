@@ -52,21 +52,21 @@ func parseBoolEnv(name string, defaultVal bool) bool {
 
 func loadConfig() config {
 	refreshInterval := 3600
-	if v := os.Getenv("REFRESH_INTERVAL"); v != "" {
+	if v := os.Getenv("RESTIC_EXPORTER_REFRESH_INTERVAL"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			refreshInterval = n
 		}
 	}
 
 	listenPort := 9183
-	if v := os.Getenv("LISTEN_PORT"); v != "" {
+	if v := os.Getenv("RESTIC_EXPORTER_LISTEN_PORT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			listenPort = n
 		}
 	}
 
 	listenAddress := "[::]"
-	if v := os.Getenv("LISTEN_ADDRESS"); v != "" {
+	if v := os.Getenv("RESTIC_EXPORTER_LISTEN_ADDRESS"); v != "" {
 		listenAddress = v
 	}
 
@@ -74,9 +74,9 @@ func loadConfig() config {
 		RefreshInterval: refreshInterval,
 		ListenAddress:   listenAddress,
 		ListenPort:      listenPort,
-		NoCheck:         parseBoolEnv("NO_CHECK", false),
-		IncludePaths:    parseBoolEnv("INCLUDE_PATHS", false),
-		Output:          os.Getenv("OUTPUT"),
+		NoCheck:         parseBoolEnv("RESTIC_EXPORTER_NO_CHECK", false),
+		IncludePaths:    parseBoolEnv("RESTIC_EXPORTER_INCLUDE_PATHS", false),
+		Output:          os.Getenv("RESTIC_EXPORTER_OUTPUT"),
 	}
 }
 
@@ -642,11 +642,6 @@ func main() {
 
 	if os.Getenv("RESTIC_PASSWORD") == "" && os.Getenv("RESTIC_PASSWORD_FILE") == "" && os.Getenv("RESTIC_PASSWORD_COMMAND") == "" {
 		slog.Error("One of the environment variables RESTIC_PASSWORD, RESTIC_PASSWORD_FILE or RESTIC_PASSWORD_COMMAND is mandatory")
-		os.Exit(1)
-	}
-
-	if os.Getenv("NO_STATS") != "" {
-		slog.Error("The environment variable NO_STATS was removed in version 2.0.0. Checkout the changelog.")
 		os.Exit(1)
 	}
 

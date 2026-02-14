@@ -51,7 +51,7 @@ These differences are by design and should **not** be reported as discrepancies:
 
 - **CLI flags**: This project accepts `--listen-port`, `--listen-address`, `--refresh-interval`, `--no-check`, `--include-paths`, and `--version` as command-line flags. Upstream is env-var-only.
 - **systemd socket activation**: This project supports `LISTEN_PID`, `LISTEN_FDS`, and `LISTEN_FDNAMES` for systemd socket activation. These are Go-specific and have no upstream equivalent.
-- **Deprecated env vars**: `NO_STATS` was removed in our 2.0.0 release. If upstream still references it, ignore it.
 - **Default port**: Go uses `9183` instead of upstream's `8001` — 8001 is too common a port.
 - **Default listen address**: Go uses `[::]` (IPv6 dual-stack) instead of upstream's `0.0.0.0` (IPv4 only) — better dual-stack support.
+- **Env var prefix**: Go uses `RESTIC_EXPORTER_` prefix on all exporter-specific env vars (e.g. `RESTIC_EXPORTER_LISTEN_PORT` instead of upstream's `LISTEN_PORT`) to avoid conflicts with other software.
 - **Implementation details**: Concurrency model, error handling, JSON parsing, and code structure are all intentionally different. Only the Prometheus output and env var interface need to match.
