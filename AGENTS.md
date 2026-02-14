@@ -2,6 +2,18 @@
 
 This project is written in Go and uses Go modules for dependency management. The repository assumes Go 1.25 or newer.
 
+## Architecture
+
+This is a single-file project (`main.go`). It works as follows:
+
+1. **Config** — `loadConfig()` reads environment variables, then `main()` applies CLI flag overrides.
+2. **Restic subprocess** — functions like `getSnapshots()`, `getGlobalStats()`, `getCheck()`, and `getLocks()` shell out to the `restic` binary and parse its JSON output.
+3. **Metric collection** — `updateResticMetrics()` calls the restic functions, deduplicates snapshots by hash, and sets Prometheus gauge values.
+4. **Refresh loop** — `main()` runs `updateResticMetrics()` once at startup, then on a timer (default 3600s). Metrics are **not** collected on each HTTP scrape.
+5. **HTTP server** — serves `/metrics` using the Prometheus client library with a custom registry.
+
+All Prometheus metrics are declared as package-level `var`s and registered in `init()`.
+
 ## Setup
 
 1. Install Go 1.25 or later.
@@ -11,38 +23,32 @@ This project is written in Go and uses Go modules for dependency management. The
 go mod download
 ```
 
+## Local development
+
+Running this project requires a real restic repository and credentials (`RESTIC_REPOSITORY` plus one of `RESTIC_PASSWORD`, `RESTIC_PASSWORD_FILE`, or `RESTIC_PASSWORD_COMMAND`). There is no mock or stub mode. Changes are typically verified via build and static analysis only.
+
 ## Testing
 
 No test suite available. That's okay! Please do not add one.
 
-## Formatting
+## Pre-commit checklist
 
-Format code with:
+Run these before committing:
 
 ```sh
 go fmt ./...
-```
-
-## Code Quality
-
-Run vet and static analysis tools before committing:
-
-```sh
 go vet ./...
+go build ./...
 ```
 
-Optionally run `golangci-lint` for additional checks:
-
-```sh
-golangci-lint run ./...
-```
+All three must pass with no errors and no formatting changes.
 
 ## Building
 
-Build the project with:
+The `version` variable in `main.go` is updated manually each release. It can also be overridden at build time via `-ldflags` to include more specific information like the current git tag:
 
 ```sh
-go build ./...
+go build -ldflags "-X main.version=$(git describe --tags)" ./...
 ```
 
 ## Comments

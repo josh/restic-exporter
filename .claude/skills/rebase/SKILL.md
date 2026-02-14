@@ -1,7 +1,7 @@
 ---
 name: rebase
-description: Guide for keeping Go port in sync with upstream restic-exporter metrics, labels, and env vars.
-disable-model-invocation: true
+description: Check upstream restic-exporter for metric, label, or env var changes and report differences.
+disable-model-invocation: false
 context: fork
 agent: Explore
 ---
@@ -30,7 +30,26 @@ gh api repos/ngosang/restic-exporter/contents/exporter/exporter.py --jq '.conten
 3. Compare environment variable names and default values.
 4. Check for any newly added or removed metrics or labels since the last review.
 
+## Output
+
+Report the differences only. Do not make changes. Organize the report as:
+
+1. **New upstream metrics/labels** — metrics or labels present upstream but missing here.
+2. **Removed upstream metrics/labels** — metrics or labels we have that upstream has dropped.
+3. **Changed definitions** — mismatches in metric type, help string, or label names.
+4. **New or changed env vars** — environment variables added, removed, or given new defaults upstream.
+5. **No differences** — if everything matches, say so.
+
 ## Reference files
 
 - **Upstream metrics and labels** are all defined in `exporter/exporter.py` in the upstream repo.
 - **Target Grafana dashboard** is `grafana/grafana_dashboard.json` in the upstream repo. Metric names and labels must match for it to work.
+
+## Intentional divergences from upstream
+
+These differences are by design and should **not** be reported as discrepancies:
+
+- **CLI flags**: This project accepts `--listen-port`, `--listen-address`, `--refresh-interval`, `--no-check`, `--include-paths`, and `--version` as command-line flags. Upstream is env-var-only.
+- **systemd socket activation**: This project supports `LISTEN_PID`, `LISTEN_FDS`, and `LISTEN_FDNAMES` for systemd socket activation. These are Go-specific and have no upstream equivalent.
+- **Deprecated env vars**: `NO_STATS` was removed in our 2.0.0 release. If upstream still references it, ignore it.
+- **Implementation details**: Concurrency model, error handling, JSON parsing, and code structure are all intentionally different. Only the Prometheus output and env var interface need to match.
