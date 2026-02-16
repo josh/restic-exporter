@@ -600,21 +600,24 @@ func writeToStdout(g prometheus.Gatherer) error {
 	return nil
 }
 
-func main() {
+func run(args []string) int {
 	cfg := loadConfig()
 
-	verbose := flag.Bool("verbose", false, "Enable debug logging")
-	showVersion := flag.Bool("version", false, "Print version and exit")
-	refreshInterval := flag.Int("refresh-interval", cfg.RefreshInterval, "Seconds between metric refreshes")
-	listenAddress := flag.String("listen-address", cfg.ListenAddress, "Address to listen on")
-	listenPort := flag.Int("listen-port", cfg.ListenPort, "Port to listen on")
-	noCheck := flag.Bool("no-check", cfg.NoCheck, "Disable repository health checks")
-	includePaths := flag.Bool("include-paths", cfg.IncludePaths, "Include snapshot paths in labels")
-	output := flag.String("output", cfg.Output, "Write metrics to file and exit (use - for stdout)")
-	flag.Parse()
+	flagSet := flag.NewFlagSet("restic-exporter", flag.ContinueOnError)
+	verbose := flagSet.Bool("verbose", false, "Enable debug logging")
+	showVersion := flagSet.Bool("version", false, "Print version and exit")
+	refreshInterval := flagSet.Int("refresh-interval", cfg.RefreshInterval, "Seconds between metric refreshes")
+	listenAddress := flagSet.String("listen-address", cfg.ListenAddress, "Address to listen on")
+	listenPort := flagSet.Int("listen-port", cfg.ListenPort, "Port to listen on")
+	noCheck := flagSet.Bool("no-check", cfg.NoCheck, "Disable repository health checks")
+	includePaths := flagSet.Bool("include-paths", cfg.IncludePaths, "Include snapshot paths in labels")
+	output := flagSet.String("output", cfg.Output, "Write metrics to file and exit (use - for stdout)")
+	if err := flagSet.Parse(args); err != nil {
+		return 2
+	}
 	if *showVersion {
 		fmt.Println(version)
-		return
+		return 0
 	}
 
 	cfg.RefreshInterval = *refreshInterval
@@ -637,31 +640,31 @@ func main() {
 
 	if os.Getenv("RESTIC_REPOSITORY") == "" {
 		slog.Error("The environment variable RESTIC_REPOSITORY is mandatory")
-		os.Exit(1)
+		return 1
 	}
 
 	if os.Getenv("RESTIC_PASSWORD") == "" && os.Getenv("RESTIC_PASSWORD_FILE") == "" && os.Getenv("RESTIC_PASSWORD_COMMAND") == "" {
 		slog.Error("One of the environment variables RESTIC_PASSWORD, RESTIC_PASSWORD_FILE or RESTIC_PASSWORD_COMMAND is mandatory")
-		os.Exit(1)
+		return 1
 	}
 
 	if cfg.Output != "" {
 		if err := updateResticMetrics(cfg); err != nil {
 			slog.Error("Failed to collect metrics", "error", err)
-			os.Exit(1)
+			return 1
 		}
 		if cfg.Output == "-" {
 			if err := writeToStdout(registry); err != nil {
 				slog.Error("Failed to write metrics to stdout", "error", err)
-				os.Exit(1)
+				return 1
 			}
 		} else {
 			if err := prometheus.WriteToTextfile(cfg.Output, registry); err != nil {
 				slog.Error("Failed to write metrics to file", "path", cfg.Output, "error", err)
-				os.Exit(1)
+				return 1
 			}
 		}
-		return
+		return 0
 	}
 
 	var ready atomic.Bool
@@ -698,10 +701,14 @@ func main() {
 	}
 	if err != nil {
 		slog.Error("Listen error", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	defer func() { _ = ln.Close() }()
 
 	slog.Error("HTTP server error", "error", http.Serve(ln, nil))
-	os.Exit(1)
+	return 1
+}
+
+func main() {
+	os.Exit(run(os.Args[1:]))
 }
