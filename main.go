@@ -141,8 +141,11 @@ type resticClient struct {
 
 func runRestic(args ...string) ([]byte, error) {
 	cmd := exec.Command(resticBinary, args...)
+	start := time.Now()
+	slog.Debug("Running restic command", "binary", resticBinary, "args", args)
 	stdout, err := cmd.Output()
 	if err != nil {
+		slog.Debug("Restic command failed", "binary", resticBinary, "args", args, "duration", time.Since(start), "error", err)
 		var exitErr *exec.ExitError
 		if ok := false; func() bool { exitErr, ok = err.(*exec.ExitError); return ok }() {
 			stderr := strings.ReplaceAll(string(exitErr.Stderr), "\n", " ")
@@ -150,6 +153,7 @@ func runRestic(args ...string) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("error executing restic %s: %v", args[0], err)
 	}
+	slog.Debug("Restic command completed", "binary", resticBinary, "args", args, "duration", time.Since(start), "stdout_bytes", len(stdout))
 	return stdout, nil
 }
 
