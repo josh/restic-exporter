@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -617,6 +618,9 @@ func run(args []string) int {
 	includePaths := flagSet.Bool("include-paths", cfg.IncludePaths, "Include snapshot paths in labels")
 	output := flagSet.String("output", cfg.Output, "Write metrics to file and exit (use - for stdout)")
 	if err := flagSet.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	if *showVersion {
