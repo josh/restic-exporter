@@ -598,7 +598,6 @@ func run(args []string) int {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
 	slog.Info("Starting Restic Prometheus Exporter", "version", version)
-	slog.Info("It could take a while if the repository is remote")
 
 	if os.Getenv("RESTIC_REPOSITORY") == "" {
 		slog.Error("The environment variable RESTIC_REPOSITORY is mandatory")
