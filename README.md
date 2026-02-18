@@ -32,7 +32,6 @@ Configuration comes from environment variables and can be overridden by CLI flag
 - `REFRESH_INTERVAL` (seconds, default: `3600`)
 - `LISTEN_ADDRESS` (default: `[::]`)
 - `LISTEN_PORT` (default: `9183`)
-- `NO_CHECK` (default: `false`)
 - `INCLUDE_PATHS` (default: `false`)
 
 ### CLI flags
@@ -41,7 +40,6 @@ Configuration comes from environment variables and can be overridden by CLI flag
 - `-refresh-interval` (seconds between metric refreshes)
 - `-listen-address`
 - `-listen-port`
-- `-no-check`
 - `-include-paths`
 
 Global stats and locks are always collected and no longer have disable flags.

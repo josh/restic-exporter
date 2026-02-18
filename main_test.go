@@ -64,9 +64,6 @@ func TestGenerateMetricsOutputFromLocalResticRepo(t *testing.T) {
 		t.Fatalf("failed to read output file: %v", err)
 	}
 	output := string(data)
-	if !strings.Contains(output, "restic_check_success 1") {
-		t.Fatalf("expected successful check metric, got:\n%s", output)
-	}
 	if !strings.Contains(output, "restic_backup_snapshots_total") {
 		t.Fatalf("expected backup snapshot metric family, got:\n%s", output)
 	}

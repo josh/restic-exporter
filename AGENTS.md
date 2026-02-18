@@ -7,7 +7,7 @@ This project is written in Go and uses Go modules for dependency management. The
 This is a single-file project (`main.go`). It works as follows:
 
 1. **Config** — `loadConfig()` reads environment variables, then `main()` applies CLI flag overrides.
-2. **Restic subprocess** — functions like `getSnapshots()`, `getGlobalStats()`, `getCheck()`, and `getLocks()` shell out to the `restic` binary and parse its JSON output.
+2. **Restic subprocess** — functions like `getSnapshots()`, `getGlobalStats()`, and `getLocks()` shell out to the `restic` binary and parse its JSON output.
 3. **Metric collection** — `updateResticMetrics()` calls the restic functions, deduplicates snapshots by hash, and sets Prometheus gauge values.
 4. **Refresh loop** — a background goroutine runs `updateResticMetrics()` immediately on startup, then on a timer (default 3600s). Metrics are **not** collected on each HTTP scrape.
 5. **Generate mode** — when `--output` is set, collects metrics once, writes to the given file (or stdout with `-`), and exits. Designed for use with cron and node_exporter's textfile collector.

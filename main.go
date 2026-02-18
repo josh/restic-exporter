@@ -33,7 +33,6 @@ type config struct {
 	RefreshInterval int
 	ListenAddress   string
 	ListenPort      int
-	NoCheck         bool
 	IncludePaths    bool
 	Output          string
 }
@@ -75,7 +74,6 @@ func loadConfig() config {
 		RefreshInterval: refreshInterval,
 		ListenAddress:   listenAddress,
 		ListenPort:      listenPort,
-		NoCheck:         parseBoolEnv("RESTIC_EXPORTER_NO_CHECK", false),
 		IncludePaths:    parseBoolEnv("RESTIC_EXPORTER_INCLUDE_PATHS", false),
 		Output:          os.Getenv("RESTIC_EXPORTER_OUTPUT"),
 	}
@@ -185,16 +183,6 @@ func getGlobalStats() (statsJSON, error) {
 	return stats, nil
 }
 
-func getCheck() int {
-	args := []string{"--no-lock", "check"}
-	_, err := runRestic(args...)
-	if err != nil {
-		slog.Warn("Error checking the repository health", "error", err)
-		return 0
-	}
-	return 1
-}
-
 var lockLineRe = regexp.MustCompile(`^[a-z0-9]+$`)
 
 func getLocks() (int, error) {
@@ -248,10 +236,6 @@ var commonLabels = []string{
 }
 
 var (
-	checkSuccess = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "restic_check_success",
-		Help: "Result of restic check operation in the repository",
-	})
 	locksTotal = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "restic_locks_total",
 		Help: "Total number of locks in the repository",
@@ -335,7 +319,6 @@ var (
 
 func init() {
 	registry.MustRegister(
-		checkSuccess,
 		locksTotal,
 		scrapeDurationSeconds,
 		sizeTotal,
@@ -486,13 +469,6 @@ func updateResticMetrics(cfg config) error {
 		globalSnapshotsCount = float64(*gstats.SnapshotsCount)
 	}
 
-	var checkVal float64
-	if !cfg.NoCheck {
-		checkVal = float64(getCheck())
-	} else {
-		checkVal = 2
-	}
-
 	lockCount, err := getLocks()
 	if err != nil {
 		slog.Warn("Failed to get locks", "error", err)
@@ -537,7 +513,6 @@ func updateResticMetrics(cfg config) error {
 		backupDurationSeconds.With(labels).Set(c.duration)
 	}
 
-	checkSuccess.Set(checkVal)
 	locksTotal.Set(locksVal)
 	sizeTotal.Set(globalSize)
 	uncompressedSizeTotal.Set(globalUncompressedSize)
@@ -595,7 +570,6 @@ func run(args []string) int {
 	refreshInterval := flagSet.Int("refresh-interval", cfg.RefreshInterval, "Seconds between metric refreshes")
 	listenAddress := flagSet.String("listen-address", cfg.ListenAddress, "Address to listen on")
 	listenPort := flagSet.Int("listen-port", cfg.ListenPort, "Port to listen on")
-	noCheck := flagSet.Bool("no-check", cfg.NoCheck, "Disable repository health checks")
 	includePaths := flagSet.Bool("include-paths", cfg.IncludePaths, "Include snapshot paths in labels")
 	output := flagSet.String("output", cfg.Output, "Write metrics to file and exit (use - for stdout)")
 	if err := flagSet.Parse(args); err != nil {
@@ -612,7 +586,6 @@ func run(args []string) int {
 	cfg.RefreshInterval = *refreshInterval
 	cfg.ListenAddress = *listenAddress
 	cfg.ListenPort = *listenPort
-	cfg.NoCheck = *noCheck
 	cfg.IncludePaths = *includePaths
 	cfg.Output = *output
 
