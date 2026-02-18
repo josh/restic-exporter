@@ -171,19 +171,6 @@ func getSnapshots() ([]snapshotJSON, error) {
 	return snaps, nil
 }
 
-func getLatestSnapshots() ([]snapshotJSON, error) {
-	args := []string{"--no-lock", "snapshots", "--latest", "1", "--json"}
-	out, err := runRestic(args...)
-	if err != nil {
-		return nil, err
-	}
-	var snaps []snapshotJSON
-	if err := json.Unmarshal(out, &snaps); err != nil {
-		return nil, fmt.Errorf("error parsing latest snapshots JSON: %w", err)
-	}
-	return snaps, nil
-}
-
 func getGlobalStats() (statsJSON, error) {
 	args := []string{"--no-lock", "stats", "--json"}
 	args = append(args, "--mode", "raw-data")
@@ -386,19 +373,13 @@ func updateResticMetrics(cfg config) error {
 		snapCounter[h]++
 	}
 
-	latestSnaps, err := getLatestSnapshots()
-	if err != nil {
-		slog.Warn("Failed to get latest snapshots", "error", err)
-		return err
-	}
-
 	type snapWithMeta struct {
 		snap      snapshotJSON
 		hash      string
 		timestamp float64
 	}
 	deduped := map[string]snapWithMeta{}
-	for _, snap := range latestSnaps {
+	for _, snap := range allSnaps {
 		h := calcSnapshotHash(snap.Hostname, snap.Username, snap.Paths)
 		ts, err := calcSnapshotTimestamp(snap.Time)
 		if err != nil {
