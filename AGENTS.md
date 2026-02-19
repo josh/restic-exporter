@@ -10,7 +10,7 @@ This is a single-file project (`main.go`). It works as follows:
 2. **Restic subprocess** — functions like `getSnapshots()`, `getGlobalStats()`, and `getLocks()` shell out to the `restic` binary and parse its JSON output.
 3. **Metric collection** — `updateResticMetrics()` calls the restic functions, deduplicates snapshots by hash, and sets Prometheus gauge values.
 4. **Refresh loop** — a background goroutine runs `updateResticMetrics()` immediately on startup, then on a timer (default 3600s). Metrics are **not** collected on each HTTP scrape.
-5. **Generate mode** — when `--output` is set, collects metrics once, writes to the given file (or stdout with `-`), and exits. Designed for use with cron and node_exporter's textfile collector.
+5. **Generate mode** — when `--output` is set, collects metrics once and exits. Output can be a file path (for node_exporter textfile collector), `-` for stdout, or an HTTP(S) URL to POST metrics to (e.g. Prometheus push/import endpoint).
 6. **HTTP server** — starts listening immediately. Returns 503 until the first collection completes, then serves `/metrics` using the Prometheus client library with a custom registry.
 
 All Prometheus metrics are declared as package-level `var`s and registered in `init()`.

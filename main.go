@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -548,15 +551,45 @@ func activationListener() (net.Listener, error) {
 	return ln, nil
 }
 
-func writeToStdout(g prometheus.Gatherer) error {
+func writeMetricsTo(w io.Writer, g prometheus.Gatherer) error {
 	mfs, err := g.Gather()
 	if err != nil {
 		return err
 	}
 	for _, mf := range mfs {
-		if _, err := expfmt.MetricFamilyToText(os.Stdout, mf); err != nil {
+		if _, err := expfmt.MetricFamilyToText(w, mf); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func writeToStdout(g prometheus.Gatherer) error {
+	return writeMetricsTo(os.Stdout, g)
+}
+
+func isHTTPOutput(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
+}
+
+func postMetrics(destURL string, body []byte) error {
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest(http.MethodPost, destURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", string(expfmt.FmtText))
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return nil
 }
@@ -571,7 +604,7 @@ func run(args []string) int {
 	listenAddress := flagSet.String("listen-address", cfg.ListenAddress, "Address to listen on")
 	listenPort := flagSet.Int("listen-port", cfg.ListenPort, "Port to listen on")
 	includePaths := flagSet.Bool("include-paths", cfg.IncludePaths, "Include snapshot paths in labels")
-	output := flagSet.String("output", cfg.Output, "Write metrics to file and exit (use - for stdout)")
+	output := flagSet.String("output", cfg.Output, "Write metrics to file and exit (use - for stdout), or POST to an HTTP(S) URL (e.g. Prometheus push/import endpoint)")
 	if err := flagSet.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -617,6 +650,16 @@ func run(args []string) int {
 		if cfg.Output == "-" {
 			if err := writeToStdout(registry); err != nil {
 				slog.Error("Failed to write metrics to stdout", "error", err)
+				return 1
+			}
+		} else if isHTTPOutput(cfg.Output) {
+			var buf bytes.Buffer
+			if err := writeMetricsTo(&buf, registry); err != nil {
+				slog.Error("Failed to serialize metrics", "error", err)
+				return 1
+			}
+			if err := postMetrics(cfg.Output, buf.Bytes()); err != nil {
+				slog.Error("Failed to POST metrics", "url", cfg.Output, "error", err)
 				return 1
 			}
 		} else {
