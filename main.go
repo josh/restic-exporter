@@ -595,7 +595,7 @@ func run(args []string) int {
 	} else {
 		level = slog.LevelInfo
 	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 
 	slog.Info("Starting Restic Prometheus Exporter", "version", version)
 
