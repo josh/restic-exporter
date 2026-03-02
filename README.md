@@ -1,6 +1,17 @@
 # restic-exporter
 
-Prometheus exporter for Restic repositories.
+Prometheus exporter for Restic repositories — a Go reimplementation of [ngosang/restic-exporter](https://github.com/ngosang/restic-exporter).
+
+This project exports the same Prometheus metrics as the original Python-based exporter and is designed as a drop-in replacement. Existing [Grafana dashboards](https://github.com/ngosang/restic-exporter/tree/main/grafana) from the upstream project are fully compatible.
+
+## Motivation
+
+The original [ngosang/restic-exporter](https://github.com/ngosang/restic-exporter) is an excellent project. This rewrite targets environments where a single static Go binary is preferred over a Python runtime.
+
+Additional features not in the upstream project:
+
+- **Oneshot mode**: Write metrics to stdout, a file, or POST to a URL and exit immediately — useful for cron jobs, systemd timers, or CI pipelines without running a persistent server.
+- **CLI flags**: All configuration options are available as both environment variables and CLI flags.
 
 ## Requirements
 
@@ -14,6 +25,21 @@ Prometheus exporter for Restic repositories.
 ```
 
 Metrics are served at `http://[::]:9183/metrics` by default.
+
+### Oneshot mode
+
+Instead of running a persistent HTTP server, you can collect metrics once and output them immediately:
+
+```sh
+# Write to stdout
+./restic-exporter -output -
+
+# Write to a file (compatible with node_exporter textfile collector)
+./restic-exporter -output /var/lib/prometheus/node-exporter/restic.prom
+
+# POST to a Prometheus push/import endpoint
+./restic-exporter -output http://prometheus:9090/api/v1/import/prometheus
+```
 
 ## Configuration
 
@@ -41,8 +67,18 @@ Configuration comes from environment variables and can be overridden by CLI flag
 - `-listen-address`
 - `-listen-port`
 - `-include-paths`
+- `-output` (write metrics to file/stdout/URL and exit)
 
-Global stats and locks are always collected and no longer have disable flags.
+## Differences from ngosang/restic-exporter
+
+| Feature                                  | ngosang/restic-exporter | this project                                   |
+| ---------------------------------------- | ----------------------- | ---------------------------------------------- |
+| Language                                 | Python                  | Go                                             |
+| `INCLUDE_PATHS` default                  | `true`                  | `false`                                        |
+| `NO_CHECK`, `NO_STATS`, `NO_LOCKS` flags | supported               | removed (stats and locks are always collected) |
+| CLI flags                                | not available           | available for all options                      |
+| Oneshot output mode                      | not available           | `-output` flag                                 |
+| Docker image                             | available               | not available                                  |
 
 ## systemd
 
@@ -65,8 +101,6 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-## Grafana dashboards (upstream)
+## Credits
 
-```
-https://github.com/ngosang/restic-exporter/tree/main/grafana
-```
+Based on [ngosang/restic-exporter](https://github.com/ngosang/restic-exporter) by [@ngosang](https://github.com/ngosang). Metric names, labels, and exporter design originate from that project.
