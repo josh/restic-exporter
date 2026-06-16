@@ -32,6 +32,7 @@ func initLocalResticRepo(t *testing.T) []string {
 	env := []string{
 		"RESTIC_REPOSITORY=" + repoDir,
 		"RESTIC_PASSWORD=password",
+		"RESTIC_CACHE_DIR=" + filepath.Join(t.TempDir(), "cache"),
 	}
 	runCommand(t, env, "restic", "init")
 
