@@ -172,6 +172,18 @@ func getSnapshots() ([]snapshotJSON, error) {
 	return snaps, nil
 }
 
+// Workaround restic 0.19.0 bug in json output
+// https://github.com/restic/restic/issues/21891
+func lastJSONLine(out []byte) []byte {
+	lines := bytes.Split(out, []byte("\n"))
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := bytes.TrimSpace(lines[i]); len(line) > 0 {
+			return line
+		}
+	}
+	return out
+}
+
 func getGlobalStats() (statsJSON, error) {
 	args := []string{"--no-lock", "stats", "--json"}
 	args = append(args, "--mode", "raw-data")
@@ -179,6 +191,7 @@ func getGlobalStats() (statsJSON, error) {
 	if err != nil {
 		return statsJSON{}, err
 	}
+	out = lastJSONLine(out)
 	var stats statsJSON
 	if err := json.Unmarshal(out, &stats); err != nil {
 		return statsJSON{}, fmt.Errorf("error parsing stats JSON: %w", err)
