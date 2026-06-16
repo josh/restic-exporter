@@ -28,8 +28,9 @@ import (
 )
 
 var (
-	version      = "1.0.2"
-	resticBinary = "restic"
+	version       = "1.0.2"
+	resticBinary  = "restic"
+	resticVersion = ""
 )
 
 type config struct {
@@ -172,6 +173,20 @@ func getSnapshots() ([]snapshotJSON, error) {
 	return snaps, nil
 }
 
+var resticVersionRe = regexp.MustCompile(`restic\s+(\d+\.\d+\.\d+)`)
+
+func getResticVersion() (string, error) {
+	out, err := runRestic("version")
+	if err != nil {
+		return "", err
+	}
+	m := resticVersionRe.FindSubmatch(out)
+	if m == nil {
+		return "", fmt.Errorf("could not parse restic version from %q", string(out))
+	}
+	return string(m[1]), nil
+}
+
 // Workaround restic 0.19.0 bug in json output
 // https://github.com/restic/restic/issues/21891
 func lastJSONLine(out []byte) []byte {
@@ -191,7 +206,9 @@ func getGlobalStats() (statsJSON, error) {
 	if err != nil {
 		return statsJSON{}, err
 	}
-	out = lastJSONLine(out)
+	if resticVersion == "0.19.0" {
+		out = lastJSONLine(out)
+	}
 	var stats statsJSON
 	if err := json.Unmarshal(out, &stats); err != nil {
 		return statsJSON{}, fmt.Errorf("error parsing stats JSON: %w", err)
@@ -654,6 +671,15 @@ func run(args []string) int {
 		slog.Error("One of the environment variables RESTIC_PASSWORD, RESTIC_PASSWORD_FILE or RESTIC_PASSWORD_COMMAND is mandatory")
 		return 1
 	}
+
+	if resticVersion == "" {
+		if rv, err := getResticVersion(); err != nil {
+			slog.Warn("Failed to detect restic version", "error", err)
+		} else {
+			resticVersion = rv
+		}
+	}
+	slog.Info("Using restic version", "version", resticVersion)
 
 	if cfg.Output != "" {
 		if err := updateResticMetrics(cfg); err != nil {
