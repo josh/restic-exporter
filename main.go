@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	version       = "1.0.3"
+	version       = "1.0.4"
 	resticBinary  = "restic"
 	resticVersion = ""
 )
