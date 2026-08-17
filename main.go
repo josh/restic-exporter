@@ -219,19 +219,51 @@ func getGlobalStats() (statsJSON, error) {
 
 var lockLineRe = regexp.MustCompile(`^[a-z0-9]+$`)
 
-func getLocks() (int, error) {
+func getLockIDs() ([]string, error) {
 	args := []string{"--no-lock", "list", "locks"}
 	out, err := runRestic(args...)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	count := 0
+	var ids []string
 	for _, line := range strings.Split(string(out), "\n") {
 		if lockLineRe.MatchString(line) {
+			ids = append(ids, line)
+		}
+	}
+	return ids, nil
+}
+
+type lockJSON struct {
+	Time string `json:"time"`
+}
+
+func getLockTime(id string) (time.Time, error) {
+	out, err := runRestic("--no-lock", "cat", "lock", id)
+	if err != nil {
+		return time.Time{}, err
+	}
+	var lock lockJSON
+	if err := json.Unmarshal(out, &lock); err != nil {
+		return time.Time{}, fmt.Errorf("error parsing lock JSON: %w", err)
+	}
+	t, err := time.Parse(time.RFC3339Nano, lock.Time)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("error parsing lock time %q: %w", lock.Time, err)
+	}
+	return t, nil
+}
+
+var staleLockTimeout = 30 * time.Minute
+
+func countStaleLocks(times []time.Time, now time.Time) int {
+	count := 0
+	for _, t := range times {
+		if now.Sub(t) > staleLockTimeout {
 			count++
 		}
 	}
-	return count, nil
+	return count
 }
 
 func calcSnapshotHash(hostname, username string, paths []string) string {
@@ -273,6 +305,10 @@ var (
 	locksTotal = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "restic_locks_total",
 		Help: "Total number of locks in the repository",
+	})
+	staleLocksTotal = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "restic_stale_locks_total",
+		Help: "Total number of locks in the repository older than restic's stale lock timeout",
 	})
 	scrapeDurationSeconds = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "restic_scrape_duration_seconds",
@@ -354,6 +390,7 @@ var (
 func init() {
 	registry.MustRegister(
 		locksTotal,
+		staleLocksTotal,
 		scrapeDurationSeconds,
 		sizeTotal,
 		uncompressedSizeTotal,
@@ -503,12 +540,22 @@ func updateResticMetrics(cfg config) error {
 		globalSnapshotsCount = float64(*gstats.SnapshotsCount)
 	}
 
-	lockCount, err := getLocks()
+	lockIDs, err := getLockIDs()
 	if err != nil {
 		slog.Warn("Failed to get locks", "error", err)
 		return err
 	}
-	locksVal := float64(lockCount)
+	lockTimes := make([]time.Time, 0, len(lockIDs))
+	for _, id := range lockIDs {
+		t, err := getLockTime(id)
+		if err != nil {
+			slog.Debug("Failed to read lock", "lock", id, "error", err)
+			continue
+		}
+		lockTimes = append(lockTimes, t)
+	}
+	locksVal := float64(len(lockIDs))
+	staleLocksVal := float64(countStaleLocks(lockTimes, time.Now()))
 
 	backupTimestamp.Reset()
 	backupSnapshotsTotal.Reset()
@@ -548,6 +595,7 @@ func updateResticMetrics(cfg config) error {
 	}
 
 	locksTotal.Set(locksVal)
+	staleLocksTotal.Set(staleLocksVal)
 	sizeTotal.Set(globalSize)
 	uncompressedSizeTotal.Set(globalUncompressedSize)
 	compressionRatio.Set(globalCompressionRatio)
