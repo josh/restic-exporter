@@ -55,10 +55,10 @@ Configuration comes from environment variables and can be overridden by CLI flag
 
 ### Optional environment variables
 
-- `REFRESH_INTERVAL` (seconds, default: `3600`)
-- `LISTEN_ADDRESS` (default: `[::]`)
-- `LISTEN_PORT` (default: `9183`)
-- `INCLUDE_PATHS` (default: `false`)
+- `RESTIC_EXPORTER_REFRESH_INTERVAL` (seconds, default: `3600`)
+- `RESTIC_EXPORTER_LISTEN_ADDRESS` (default: `[::]`)
+- `RESTIC_EXPORTER_LISTEN_PORT` (default: `9183`)
+- `RESTIC_EXPORTER_INCLUDE_PATHS` (default: `false`)
 
 ### CLI flags
 
@@ -74,7 +74,7 @@ Configuration comes from environment variables and can be overridden by CLI flag
 | Feature                                  | ngosang/restic-exporter | this project                                   |
 | ---------------------------------------- | ----------------------- | ---------------------------------------------- |
 | Language                                 | Python                  | Go                                             |
-| `INCLUDE_PATHS` default                  | `true`                  | `false`                                        |
+| Environment variable names               | unprefixed              | prefixed with `RESTIC_EXPORTER_`               |
 | `NO_CHECK`, `NO_STATS`, `NO_LOCKS` flags | supported               | removed (stats and locks are always collected) |
 | CLI flags                                | not available           | available for all options                      |
 | Oneshot output mode                      | not available           | `-output` flag                                 |
