@@ -49,6 +49,17 @@ func initLocalResticRepo(t *testing.T) []string {
 	return env
 }
 
+func TestRejectsInvalidRefreshInterval(t *testing.T) {
+	t.Setenv("RESTIC_REPOSITORY", filepath.Join(t.TempDir(), "repo"))
+	t.Setenv("RESTIC_PASSWORD", "password")
+
+	for _, interval := range []string{"0", "-5", "10000000000"} {
+		if code := run([]string{"--refresh-interval", interval}); code != 1 {
+			t.Fatalf("run() with --refresh-interval %s returned %d, want 1", interval, code)
+		}
+	}
+}
+
 func TestGenerateMetricsOutputFromLocalResticRepo(t *testing.T) {
 	env := initLocalResticRepo(t)
 

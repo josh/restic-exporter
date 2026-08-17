@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -708,6 +709,11 @@ func run(args []string) int {
 			}
 		}
 		return 0
+	}
+
+	if cfg.RefreshInterval <= 0 || int64(cfg.RefreshInterval) > math.MaxInt64/int64(time.Second) {
+		slog.Error("Refresh interval must be positive and fit in a time duration", "refresh_interval", cfg.RefreshInterval)
+		return 1
 	}
 
 	var ready atomic.Bool
