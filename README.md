@@ -12,12 +12,11 @@ Additional features not in the upstream project:
 
 - **Oneshot mode**: Write metrics to stdout, a file, or POST to a URL and exit immediately — useful for cron jobs, systemd timers, or CI pipelines without running a persistent server.
 - **CLI flags**: All configuration options are available as both environment variables and CLI flags.
-- **Stale lock detection**: `restic_stale_locks_total` counts locks older than restic's own 30 minute stale lock timeout.
+- **Stale lock detection**: `restic_stale_locks_total` counts locks restic considers stale — older than its own 30 minute stale lock timeout, or owned by a process that no longer exists on the exporter host.
 
 ## Requirements
 
 - Go 1.25+ (for building)
-- `restic` available in `PATH`
 
 ## Usage
 
@@ -48,11 +47,8 @@ Configuration comes from environment variables and can be overridden by CLI flag
 
 ### Required environment variables
 
-- `RESTIC_REPOSITORY`
-- One of:
-  - `RESTIC_PASSWORD`
-  - `RESTIC_PASSWORD_FILE`
-  - `RESTIC_PASSWORD_COMMAND`
+- `RESTIC_REPOSITORY` or `RESTIC_REPOSITORY_FILE`
+- `RESTIC_PASSWORD` or `RESTIC_PASSWORD_FILE` or `RESTIC_PASSWORD_COMMAND`
 
 ### Optional environment variables
 
@@ -61,6 +57,7 @@ Configuration comes from environment variables and can be overridden by CLI flag
 - `RESTIC_EXPORTER_LISTEN_PORT` (default: `9183`)
 - `RESTIC_EXPORTER_INCLUDE_PATHS` (default: `false`)
 
+The following standard restic environment variables are also honored: `RESTIC_KEY_HINT`, `RESTIC_CACHE_DIR`, `RESTIC_CACERT`, `RESTIC_TLS_CLIENT_CERT`, `RESTIC_HTTP_USER_AGENT`, and all backend-specific credentials (`AWS_*`, `B2_*`, `AZURE_*`, `GOOGLE_*`, `RESTIC_REST_*`, ...).
 ### CLI flags
 
 - `-verbose` (enable debug logging)

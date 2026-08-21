@@ -6,18 +6,7 @@ on:
 
 jobs:
   test:
-    name: "test (restic ${{ matrix.restic_version }})"
     runs-on: ubuntu-24.04
-
-    strategy:
-      matrix:
-        include:
-          - restic_version: "0.18.0"
-          - restic_version: "0.18.1"
-          - restic_version: "0.19.1"
-
-    env:
-      RESTIC_VERSION: "${{ matrix.restic_version }}"
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -25,14 +14,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.26.5"
-
-      - name: Install restic
-        run: |
-          set -o xtrace
-          curl --location "https://github.com/restic/restic/releases/download/v${RESTIC_VERSION}/restic_${RESTIC_VERSION}_linux_amd64.bz2" --output "restic_${RESTIC_VERSION}_linux_amd64.bz2"
-          bunzip2 "restic_${RESTIC_VERSION}_linux_amd64.bz2"
-          chmod +x "restic_${RESTIC_VERSION}_linux_amd64"
-          sudo mv "restic_${RESTIC_VERSION}_linux_amd64" /usr/local/bin/restic
 
       - name: Build
         run: |
