@@ -54,4 +54,5 @@ These differences are by design and should **not** be reported as discrepancies:
 - **Default port**: Go uses `9183` instead of upstream's `8001` — 8001 is too common a port.
 - **Default listen address**: Go uses `[::]` (IPv6 dual-stack) instead of upstream's `0.0.0.0` (IPv4 only) — better dual-stack support.
 - **Env var prefix**: Go uses `RESTIC_EXPORTER_` prefix on all exporter-specific env vars (e.g. `RESTIC_EXPORTER_LISTEN_PORT` instead of upstream's `LISTEN_PORT`) to avoid conflicts with other software.
+- **Additional metrics**: `restic_stale_locks_total` has no upstream equivalent. It is additive — no upstream metric is renamed, removed, or relabelled — so upstream dashboards and alert rules are unaffected. `restic_locks_total` stays unchanged for compatibility.
 - **Implementation details**: Concurrency model, error handling, JSON parsing, and code structure are all intentionally different. Only the Prometheus output and env var interface need to match.

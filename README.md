@@ -12,6 +12,7 @@ Additional features not in the upstream project:
 
 - **Oneshot mode**: Write metrics to stdout, a file, or POST to a URL and exit immediately — useful for cron jobs, systemd timers, or CI pipelines without running a persistent server.
 - **CLI flags**: All configuration options are available as both environment variables and CLI flags.
+- **Stale lock detection**: `restic_stale_locks_total` counts locks older than restic's own 30 minute stale lock timeout.
 
 ## Requirements
 
