@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,7 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"regexp"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,16 +23,22 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/josh/restic-api/api/backend"
+	"github.com/josh/restic-api/api/backend/all"
+	"github.com/josh/restic-api/api/backend/cache"
+	"github.com/josh/restic-api/api/crypto"
+	"github.com/josh/restic-api/api/data"
+	"github.com/josh/restic-api/api/global"
+	"github.com/josh/restic-api/api/repository"
+	"github.com/josh/restic-api/api/restic"
+	"github.com/josh/restic-api/api/ui"
+	"github.com/josh/restic-api/api/ui/progress"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/expfmt"
 )
 
-var (
-	version       = "1.0.4"
-	resticBinary  = "restic"
-	resticVersion = ""
-)
+var version = "1.0.4"
 
 type config struct {
 	RefreshInterval int
@@ -84,43 +90,6 @@ func loadConfig() config {
 	}
 }
 
-type snapshotSummaryJSON struct {
-	FilesNew            *int64  `json:"files_new"`
-	FilesChanged        *int64  `json:"files_changed"`
-	FilesUnmodified     *int64  `json:"files_unmodified"`
-	DirsNew             *int64  `json:"dirs_new"`
-	DirsChanged         *int64  `json:"dirs_changed"`
-	DirsUnmodified      *int64  `json:"dirs_unmodified"`
-	DataAdded           *int64  `json:"data_added"`
-	TotalFilesProcessed *int64  `json:"total_files_processed"`
-	TotalBytesProcessed *int64  `json:"total_bytes_processed"`
-	TotalDuration       *int64  `json:"total_duration"`
-	BackupStart         *string `json:"backup_start"`
-	BackupEnd           *string `json:"backup_end"`
-}
-
-type snapshotJSON struct {
-	ShortID        string               `json:"short_id"`
-	ID             string               `json:"id"`
-	Hostname       string               `json:"hostname"`
-	Username       string               `json:"username"`
-	Time           string               `json:"time"`
-	Paths          []string             `json:"paths"`
-	Tags           []string             `json:"tags"`
-	ProgramVersion string               `json:"program_version"`
-	Summary        *snapshotSummaryJSON `json:"summary"`
-}
-
-type statsJSON struct {
-	TotalSize                int64    `json:"total_size"`
-	TotalFileCount           int64    `json:"total_file_count"`
-	SnapshotsCount           *int64   `json:"snapshots_count"`
-	TotalUncompressedSize    *int64   `json:"total_uncompressed_size"`
-	CompressionRatio         *float64 `json:"compression_ratio"`
-	TotalCiphertextBlobCount *int64   `json:"total_ciphertext_blob_count"`
-	TotalBlobCount           *int64   `json:"total_blob_count"`
-}
-
 type resticClient struct {
 	hostname        string
 	username        string
@@ -143,127 +112,187 @@ type resticClient struct {
 	duration        float64
 }
 
-func runRestic(args ...string) ([]byte, error) {
-	cmd := exec.Command(resticBinary, args...)
-	start := time.Now()
-	slog.Debug("Running restic command", "binary", resticBinary, "args", args)
-	stdout, err := cmd.Output()
-	if err != nil {
-		slog.Debug("Restic command failed", "binary", resticBinary, "args", args, "duration", time.Since(start), "error", err)
-		var exitErr *exec.ExitError
-		if ok := false; func() bool { exitErr, ok = err.(*exec.ExitError); return ok }() {
-			stderr := strings.ReplaceAll(string(exitErr.Stderr), "\n", " ")
-			return nil, fmt.Errorf("error executing restic %s: %s exit code: %d", args[0], stderr, exitErr.ExitCode())
-		}
-		return nil, fmt.Errorf("error executing restic %s: %v", args[0], err)
+func resolveResticPassword() (string, error) {
+	passwordFile := os.Getenv("RESTIC_PASSWORD_FILE")
+	passwordCommand := os.Getenv("RESTIC_PASSWORD_COMMAND")
+	if passwordFile != "" && passwordCommand != "" {
+		return "", errors.New("RESTIC_PASSWORD_FILE and RESTIC_PASSWORD_COMMAND are mutually exclusive")
 	}
-	slog.Debug("Restic command completed", "binary", resticBinary, "args", args, "duration", time.Since(start), "stdout_bytes", len(stdout))
-	return stdout, nil
+	if passwordCommand != "" {
+		args, err := backend.SplitShellStrings(passwordCommand)
+		if err != nil {
+			return "", err
+		}
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Stderr = os.Stderr
+		output, err := cmd.Output()
+		if err != nil {
+			return "", fmt.Errorf("error executing password command: %w", err)
+		}
+		return strings.TrimSpace(string(output)), nil
+	}
+	if passwordFile != "" {
+		return global.LoadPasswordFromFile(passwordFile)
+	}
+	return os.Getenv("RESTIC_PASSWORD"), nil
 }
 
-func getSnapshots() ([]snapshotJSON, error) {
-	args := []string{"--no-lock", "snapshots", "--json"}
-	out, err := runRestic(args...)
+type noTerminal struct{ ui.MockTerminal }
+
+func (*noTerminal) InputIsTerminal() bool { return false }
+func (*noTerminal) ReadPassword(context.Context, string) (string, error) {
+	return "", errors.New("password prompt is not available")
+}
+
+type slogPrinter struct{ progress.NoopPrinter }
+
+func (slogPrinter) E(msg string, args ...interface{}) { slog.Warn(fmt.Sprintf(msg, args...)) }
+
+// OpenRepository hard-fails on cache errors; probe first so we can fall back to NoCache.
+func checkCacheDir(dir string) error {
+	if dir == "" {
+		var err error
+		dir, err = cache.DefaultDir()
+		if err != nil {
+			return err
+		}
+	}
+	return os.MkdirAll(dir, 0o700)
+}
+
+func openRepository(ctx context.Context) (*repository.Repository, error) {
+	password, err := resolveResticPassword()
 	if err != nil {
 		return nil, err
 	}
-	var snaps []snapshotJSON
-	if err := json.Unmarshal(out, &snaps); err != nil {
-		return nil, fmt.Errorf("error parsing snapshots JSON: %w", err)
+	if password == "" {
+		return nil, errors.New("resolved password is empty; set RESTIC_PASSWORD, RESTIC_PASSWORD_FILE or RESTIC_PASSWORD_COMMAND")
+	}
+	gopts := global.Options{
+		Repo:           os.Getenv("RESTIC_REPOSITORY"),
+		RepositoryFile: os.Getenv("RESTIC_REPOSITORY_FILE"),
+		KeyHint:        os.Getenv("RESTIC_KEY_HINT"),
+		CacheDir:       os.Getenv("RESTIC_CACHE_DIR"),
+		NoLock:         true,
+		Password:       password,
+		Term:           &noTerminal{},
+		Backends:       all.Backends(),
+	}
+	if err := checkCacheDir(gopts.CacheDir); err != nil {
+		slog.Warn("Unable to open cache, running without a local cache", "error", err)
+		gopts.NoCache = true
+	}
+	if v := os.Getenv("RESTIC_CACERT"); v != "" {
+		gopts.RootCertFilenames = strings.Split(v, ",")
+	}
+	gopts.TLSClientCertKeyFilename = os.Getenv("RESTIC_TLS_CLIENT_CERT")
+	gopts.HTTPUserAgent = os.Getenv("RESTIC_HTTP_USER_AGENT")
+	return global.OpenRepository(ctx, gopts, &progress.NoopPrinter{})
+}
+
+func getSnapshots(ctx context.Context, repo *repository.Repository) ([]*data.Snapshot, error) {
+	var snaps []*data.Snapshot
+	err := data.ForAllSnapshots(ctx, repo, repo, nil, func(id restic.ID, sn *data.Snapshot, err error) error {
+		if err != nil {
+			slog.Warn("Failed to load snapshot", "id", id.Str(), "error", err)
+			return nil
+		}
+		snaps = append(snaps, sn)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error listing snapshots: %w", err)
 	}
 	return snaps, nil
 }
 
-var resticVersionRe = regexp.MustCompile(`restic\s+(\d+\.\d+\.\d+)`)
-
-func getResticVersion() (string, error) {
-	out, err := runRestic("version")
-	if err != nil {
-		return "", err
-	}
-	m := resticVersionRe.FindSubmatch(out)
-	if m == nil {
-		return "", fmt.Errorf("could not parse restic version from %q", string(out))
-	}
-	return string(m[1]), nil
+type globalStats struct {
+	totalSize        float64
+	uncompressedSize float64
+	compressionRatio float64
+	blobCount        float64
+	snapshotsCount   float64
 }
 
-// Workaround restic 0.19.0 bug in json output
-// https://github.com/restic/restic/issues/21891
-func lastJSONLine(out []byte) []byte {
-	lines := bytes.Split(out, []byte("\n"))
-	for i := len(lines) - 1; i >= 0; i-- {
-		if line := bytes.TrimSpace(lines[i]); len(line) > 0 {
-			return line
+// Port of `restic stats --mode raw-data` over all snapshots, from
+// cmd/restic/cmd_stats.go which is not importable from restic-api.
+func getGlobalStats(ctx context.Context, repo *repository.Repository, snaps []*data.Snapshot) (globalStats, error) {
+	if err := repo.LoadIndex(ctx, nil); err != nil {
+		return globalStats{}, fmt.Errorf("error loading index: %w", err)
+	}
+
+	blobs := repo.NewAssociatedBlobSet()
+	for _, sn := range snaps {
+		if sn.Tree == nil {
+			return globalStats{}, fmt.Errorf("snapshot %s has nil tree", sn.ID().Str())
+		}
+		if err := data.FindUsedBlobs(ctx, repo, restic.IDs{*sn.Tree}, blobs, nil); err != nil {
+			// snapshot may have been pruned since the listing
+			slog.Warn("Failed to walk snapshot, skipping", "id", sn.ID().Str(), "error", err)
+			continue
 		}
 	}
-	return out
-}
 
-func getGlobalStats() (statsJSON, error) {
-	args := []string{"--no-lock", "stats", "--json"}
-	args = append(args, "--mode", "raw-data")
-	out, err := runRestic(args...)
-	if err != nil {
-		return statsJSON{}, err
-	}
-	if resticVersion == "0.19.0" {
-		out = lastJSONLine(out)
-	}
-	var stats statsJSON
-	if err := json.Unmarshal(out, &stats); err != nil {
-		return statsJSON{}, fmt.Errorf("error parsing stats JSON: %w", err)
-	}
-	return stats, nil
-}
-
-var lockLineRe = regexp.MustCompile(`^[a-z0-9]+$`)
-
-func getLockIDs() ([]string, error) {
-	args := []string{"--no-lock", "list", "locks"}
-	out, err := runRestic(args...)
-	if err != nil {
-		return nil, err
-	}
-	var ids []string
-	for _, line := range strings.Split(string(out), "\n") {
-		if lockLineRe.MatchString(line) {
-			ids = append(ids, line)
+	var totalSize, totalUncompressed, compressedSize, compressedUncompressed, blobCount uint64
+	repoVersion := repo.Config().Version
+	for bh := range blobs.Keys() {
+		pbs := repo.LookupBlob(bh.Type, bh.ID)
+		if len(pbs) == 0 {
+			slog.Warn("Blob not found in index, skipping", "blob", bh)
+			continue
 		}
-	}
-	return ids, nil
-}
-
-type lockJSON struct {
-	Time string `json:"time"`
-}
-
-func getLockTime(id string) (time.Time, error) {
-	out, err := runRestic("--no-lock", "cat", "lock", id)
-	if err != nil {
-		return time.Time{}, err
-	}
-	var lock lockJSON
-	if err := json.Unmarshal(out, &lock); err != nil {
-		return time.Time{}, fmt.Errorf("error parsing lock JSON: %w", err)
-	}
-	t, err := time.Parse(time.RFC3339Nano, lock.Time)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("error parsing lock time %q: %w", lock.Time, err)
-	}
-	return t, nil
-}
-
-var staleLockTimeout = 30 * time.Minute
-
-func countStaleLocks(times []time.Time, now time.Time) int {
-	count := 0
-	for _, t := range times {
-		if now.Sub(t) > staleLockTimeout {
-			count++
+		pb := pbs[0]
+		totalSize += uint64(pb.Length)
+		if repoVersion >= 2 {
+			totalUncompressed += uint64(crypto.CiphertextLength(int(pb.DataLength())))
+			if pb.IsCompressed() {
+				compressedSize += uint64(pb.Length)
+				compressedUncompressed += uint64(crypto.CiphertextLength(int(pb.DataLength())))
+			}
 		}
+		blobCount++
 	}
-	return count
+
+	gs := globalStats{
+		totalSize:        float64(totalSize),
+		uncompressedSize: -1,
+		compressionRatio: -1,
+		blobCount:        -1,
+		snapshotsCount:   float64(len(snaps)),
+	}
+	if totalUncompressed > 0 {
+		gs.uncompressedSize = float64(totalUncompressed)
+	}
+	if compressedSize > 0 {
+		gs.compressionRatio = float64(compressedUncompressed) / float64(compressedSize)
+	}
+	if blobCount > 0 {
+		gs.blobCount = float64(blobCount)
+	}
+	return gs, nil
+}
+
+func getLocks(ctx context.Context, repo *repository.Repository) (total, stale int, err error) {
+	err = repo.List(ctx, restic.LockFile, func(id restic.ID, size int64) error {
+		total++
+		if size == 0 {
+			// interrupted-upload artifact
+			return nil
+		}
+		lock, err := restic.LoadLock(ctx, repo, id)
+		if err != nil {
+			slog.Debug("Failed to read lock", "lock", id.Str(), "error", err)
+			return nil
+		}
+		if lock.Stale() {
+			stale++
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("error listing locks: %w", err)
+	}
+	return total, stale, nil
 }
 
 func calcSnapshotHash(hostname, username string, paths []string) string {
@@ -272,21 +301,6 @@ func calcSnapshotHash(hostname, username string, paths []string) string {
 	text := hostname + username + strings.Join(normalized, ",")
 	h := sha256.Sum256([]byte(text))
 	return fmt.Sprintf("%x", h)
-}
-
-func calcSnapshotTimestamp(timeStr string) (float64, error) {
-	t, err := time.Parse(time.RFC3339Nano, timeStr)
-	if err != nil {
-		return 0, err
-	}
-	return float64(t.Unix()), nil
-}
-
-func ptrToFloat(p *int64, fallback float64) float64 {
-	if p == nil {
-		return fallback
-	}
-	return float64(*p)
 }
 
 var registry = prometheus.NewRegistry()
@@ -308,7 +322,7 @@ var (
 	})
 	staleLocksTotal = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "restic_stale_locks_total",
-		Help: "Total number of locks in the repository older than restic's stale lock timeout",
+		Help: "Total number of locks in the repository considered stale by restic",
 	})
 	scrapeDurationSeconds = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "restic_scrape_duration_seconds",
@@ -412,10 +426,17 @@ func init() {
 	)
 }
 
-func updateResticMetrics(cfg config) error {
+func updateResticMetrics(ctx context.Context, cfg config) error {
 	start := time.Now()
 
-	allSnaps, err := getSnapshots()
+	repo, err := openRepository(ctx)
+	if err != nil {
+		slog.Warn("Failed to open repository", "error", err)
+		return err
+	}
+	defer func() { _ = repo.Close() }()
+
+	allSnaps, err := getSnapshots(ctx, repo)
 	if err != nil {
 		slog.Warn("Failed to get snapshots", "error", err)
 		return err
@@ -428,20 +449,15 @@ func updateResticMetrics(cfg config) error {
 	}
 
 	type snapWithMeta struct {
-		snap      snapshotJSON
-		hash      string
-		timestamp float64
+		snap *data.Snapshot
+		hash string
 	}
 	deduped := map[string]snapWithMeta{}
 	for _, snap := range allSnaps {
 		h := calcSnapshotHash(snap.Hostname, snap.Username, snap.Paths)
-		ts, err := calcSnapshotTimestamp(snap.Time)
-		if err != nil {
-			slog.Warn("Failed to parse snapshot time", "time", snap.Time, "error", err)
-			continue
-		}
-		if existing, ok := deduped[h]; !ok || ts > existing.timestamp {
-			deduped[h] = snapWithMeta{snap: snap, hash: h, timestamp: ts}
+		if existing, ok := deduped[h]; !ok || snap.Time.After(existing.snap.Time) ||
+			(snap.Time.Equal(existing.snap.Time) && snap.ID().String() > existing.snap.ID().String()) {
+			deduped[h] = snapWithMeta{snap: snap, hash: h}
 		}
 	}
 
@@ -479,27 +495,23 @@ func updateResticMetrics(cfg config) error {
 			tags:          tags,
 			paths:         pathsLabel,
 			snapshotCount: snapCounter[h],
-			timestamp:     sm.timestamp,
+			timestamp:     float64(snap.Time.Unix()),
 		}
 
 		if snap.Summary != nil {
-			c.totalSize = ptrToFloat(snap.Summary.TotalBytesProcessed, -1)
-			c.totalFileCount = ptrToFloat(snap.Summary.TotalFilesProcessed, -1)
-			c.filesNew = ptrToFloat(snap.Summary.FilesNew, -1)
-			c.filesChanged = ptrToFloat(snap.Summary.FilesChanged, -1)
-			c.filesUnmodified = ptrToFloat(snap.Summary.FilesUnmodified, -1)
-			c.dirsNew = ptrToFloat(snap.Summary.DirsNew, -1)
-			c.dirsChanged = ptrToFloat(snap.Summary.DirsChanged, -1)
-			c.dirsUnmodified = ptrToFloat(snap.Summary.DirsUnmodified, -1)
-			c.dataAdded = ptrToFloat(snap.Summary.DataAdded, -1)
+			c.totalSize = float64(snap.Summary.TotalBytesProcessed)
+			c.totalFileCount = float64(snap.Summary.TotalFilesProcessed)
+			c.filesNew = float64(snap.Summary.FilesNew)
+			c.filesChanged = float64(snap.Summary.FilesChanged)
+			c.filesUnmodified = float64(snap.Summary.FilesUnmodified)
+			c.dirsNew = float64(snap.Summary.DirsNew)
+			c.dirsChanged = float64(snap.Summary.DirsChanged)
+			c.dirsUnmodified = float64(snap.Summary.DirsUnmodified)
+			c.dataAdded = float64(snap.Summary.DataAdded)
 
 			c.duration = -1
-			if snap.Summary.BackupStart != nil && snap.Summary.BackupEnd != nil {
-				startT, err1 := time.Parse(time.RFC3339Nano, *snap.Summary.BackupStart)
-				endT, err2 := time.Parse(time.RFC3339Nano, *snap.Summary.BackupEnd)
-				if err1 == nil && err2 == nil {
-					c.duration = endT.Sub(startT).Seconds()
-				}
+			if !snap.Summary.BackupStart.IsZero() && !snap.Summary.BackupEnd.IsZero() {
+				c.duration = snap.Summary.BackupEnd.Sub(snap.Summary.BackupStart).Seconds()
 			}
 		} else {
 			c.totalSize = -1
@@ -517,45 +529,17 @@ func updateResticMetrics(cfg config) error {
 		clients = append(clients, c)
 	}
 
-	gstats, err := getGlobalStats()
+	gstats, err := getGlobalStats(ctx, repo, allSnaps)
 	if err != nil {
 		slog.Warn("Failed to get global stats", "error", err)
 		return err
 	}
-	globalSize := float64(gstats.TotalSize)
-	globalUncompressedSize := float64(-1)
-	if gstats.TotalUncompressedSize != nil {
-		globalUncompressedSize = float64(*gstats.TotalUncompressedSize)
-	}
-	globalCompressionRatio := float64(-1)
-	if gstats.CompressionRatio != nil {
-		globalCompressionRatio = *gstats.CompressionRatio
-	}
-	globalBlobCount := float64(-1)
-	if gstats.TotalBlobCount != nil {
-		globalBlobCount = float64(*gstats.TotalBlobCount)
-	}
-	globalSnapshotsCount := float64(-1)
-	if gstats.SnapshotsCount != nil {
-		globalSnapshotsCount = float64(*gstats.SnapshotsCount)
-	}
 
-	lockIDs, err := getLockIDs()
+	totalLocks, staleLocks, err := getLocks(ctx, repo)
 	if err != nil {
 		slog.Warn("Failed to get locks", "error", err)
 		return err
 	}
-	lockTimes := make([]time.Time, 0, len(lockIDs))
-	for _, id := range lockIDs {
-		t, err := getLockTime(id)
-		if err != nil {
-			slog.Debug("Failed to read lock", "lock", id, "error", err)
-			continue
-		}
-		lockTimes = append(lockTimes, t)
-	}
-	locksVal := float64(len(lockIDs))
-	staleLocksVal := float64(countStaleLocks(lockTimes, time.Now()))
 
 	backupTimestamp.Reset()
 	backupSnapshotsTotal.Reset()
@@ -594,13 +578,13 @@ func updateResticMetrics(cfg config) error {
 		backupDurationSeconds.With(labels).Set(c.duration)
 	}
 
-	locksTotal.Set(locksVal)
-	staleLocksTotal.Set(staleLocksVal)
-	sizeTotal.Set(globalSize)
-	uncompressedSizeTotal.Set(globalUncompressedSize)
-	compressionRatio.Set(globalCompressionRatio)
-	blobCountTotal.Set(globalBlobCount)
-	snapshotsTotal.Set(globalSnapshotsCount)
+	locksTotal.Set(float64(totalLocks))
+	staleLocksTotal.Set(float64(staleLocks))
+	sizeTotal.Set(gstats.totalSize)
+	uncompressedSizeTotal.Set(gstats.uncompressedSize)
+	compressionRatio.Set(gstats.compressionRatio)
+	blobCountTotal.Set(gstats.blobCount)
+	snapshotsTotal.Set(gstats.snapshotsCount)
 	scrapeDurationSeconds.Set(time.Since(start).Seconds())
 
 	return nil
@@ -711,8 +695,8 @@ func run(args []string) int {
 
 	slog.Info("Starting Restic Prometheus Exporter", "version", version)
 
-	if os.Getenv("RESTIC_REPOSITORY") == "" {
-		slog.Error("The environment variable RESTIC_REPOSITORY is mandatory")
+	if os.Getenv("RESTIC_REPOSITORY") == "" && os.Getenv("RESTIC_REPOSITORY_FILE") == "" {
+		slog.Error("One of the environment variables RESTIC_REPOSITORY or RESTIC_REPOSITORY_FILE is mandatory")
 		return 1
 	}
 
@@ -721,17 +705,15 @@ func run(args []string) int {
 		return 1
 	}
 
-	if resticVersion == "" {
-		if rv, err := getResticVersion(); err != nil {
-			slog.Warn("Failed to detect restic version", "error", err)
-		} else {
-			resticVersion = rv
-		}
-	}
-	slog.Info("Using restic version", "version", resticVersion)
+	// api/restic's init swallows SIGHUP; restore the default disposition
+	signal.Reset(syscall.SIGHUP)
+
+	slog.Info("Using restic version", "version", global.Version)
+
+	ctx := context.Background()
 
 	if cfg.Output != "" {
-		if err := updateResticMetrics(cfg); err != nil {
+		if err := updateResticMetrics(ctx, cfg); err != nil {
 			slog.Error("Failed to collect metrics", "error", err)
 			return 1
 		}
@@ -770,7 +752,7 @@ func run(args []string) int {
 		defer ticker.Stop()
 		for {
 			slog.Info("Refreshing stats", "interval_seconds", cfg.RefreshInterval)
-			if err := updateResticMetrics(cfg); err != nil {
+			if err := updateResticMetrics(ctx, cfg); err != nil {
 				slog.Error("Unable to collect metrics from Restic", "error", err)
 			}
 			ready.Store(true)

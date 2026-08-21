@@ -7,7 +7,7 @@ This project is written in Go and uses Go modules for dependency management. The
 This is a single-file project (`main.go`). It works as follows:
 
 1. **Config** — `loadConfig()` reads environment variables, then `main()` applies CLI flag overrides.
-2. **Restic subprocess** — functions like `getSnapshots()`, `getGlobalStats()`, and `getLockIDs()` shell out to the `restic` binary and parse its JSON output. Every invocation passes `--no-lock` so the exporter never locks the repository or observes a lock of its own.
+2. **Restic as a library** — `openRepository()` builds `global.Options` from the standard `RESTIC_*` environment variables and opens the repository through `github.com/josh/restic-api` (a fork of restic with `internal/` exposed as `api/`; code exists only on tags, pin exactly). `getSnapshots()`, `getGlobalStats()`, and `getLocks()` read repository data in-process — no restic binary is involved anywhere, and the exporter never takes a repository lock. `getGlobalStats()` is a port of `restic stats --mode raw-data` from upstream `cmd/restic/cmd_stats.go`, which is not importable.
 3. **Metric collection** — `updateResticMetrics()` calls the restic functions, deduplicates snapshots by hash, and sets Prometheus gauge values.
 4. **Refresh loop** — a background goroutine runs `updateResticMetrics()` immediately on startup, then on a timer (default 3600s). Metrics are **not** collected on each HTTP scrape.
 5. **Generate mode** — when `--output` is set, collects metrics once and exits. Output can be a file path (for node_exporter textfile collector), `-` for stdout, or an HTTP(S) URL to POST metrics to (e.g. Prometheus push/import endpoint).
@@ -26,11 +26,11 @@ go mod download
 
 ## Local development
 
-Running this project requires a real restic repository and credentials (`RESTIC_REPOSITORY` plus one of `RESTIC_PASSWORD`, `RESTIC_PASSWORD_FILE`, or `RESTIC_PASSWORD_COMMAND`). There is no mock or stub mode. Changes are typically verified via build and static analysis only.
+Running this project requires a real restic repository and credentials (`RESTIC_REPOSITORY` or `RESTIC_REPOSITORY_FILE`, plus one of `RESTIC_PASSWORD`, `RESTIC_PASSWORD_FILE`, or `RESTIC_PASSWORD_COMMAND`). There is no mock or stub mode, but the test suite creates throwaway local repositories, so `go test` covers most changes.
 
 ## Testing
 
-No test suite available. That's okay! Please do not add one.
+Run `go test ./...`. Tests live in `main_test.go` and create real local restic repositories in temp directories using the restic-api library itself (`global.CreateRepository` plus the archiver) — no restic binary or network access is required. Ambient `RESTIC_*` environment variables are cleared by `clearResticEnv` so a developer's own restic config cannot leak into tests.
 
 ## Pre-commit checklist
 
