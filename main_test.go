@@ -9,6 +9,19 @@ import (
 	"testing"
 )
 
+func clearResticEnv(t *testing.T) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(key, "RESTIC_") {
+			t.Setenv(key, "")
+			if err := os.Unsetenv(key); err != nil {
+				t.Fatalf("unset %s failed: %v", key, err)
+			}
+		}
+	}
+}
+
 func runCommand(t *testing.T, env []string, name string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command(name, args...)
@@ -22,6 +35,7 @@ func runCommand(t *testing.T, env []string, name string, args ...string) string 
 
 func initLocalResticRepo(t *testing.T) []string {
 	t.Helper()
+	clearResticEnv(t)
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	dataDir := filepath.Join(t.TempDir(), "data")
 	defer func() { _ = os.RemoveAll(dataDir) }()
@@ -50,6 +64,7 @@ func initLocalResticRepo(t *testing.T) []string {
 }
 
 func TestRejectsInvalidRefreshInterval(t *testing.T) {
+	clearResticEnv(t)
 	t.Setenv("RESTIC_REPOSITORY", filepath.Join(t.TempDir(), "repo"))
 	t.Setenv("RESTIC_PASSWORD", "password")
 
