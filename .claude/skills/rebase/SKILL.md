@@ -44,6 +44,7 @@ Report the differences only. Do not make changes. Organize the report as:
 
 - **Upstream metrics and labels** are all defined in `exporter/exporter.py` in the upstream repo.
 - **Target Grafana dashboard** is `grafana/grafana_dashboard.json` in the upstream repo. Metric names and labels must match for it to work.
+- **Our Grafana dashboard** is `grafana/restic-exporter.json`. It began as a copy of the upstream file but is now an intentional fork — see below. Compare the two with `jq -S`, not raw `diff`: our copy is Prettier-formatted, so a plain diff is all noise.
 
 ## Intentional divergences from upstream
 
@@ -54,5 +55,6 @@ These differences are by design and should **not** be reported as discrepancies:
 - **Default port**: Go uses `9183` instead of upstream's `8001` — 8001 is too common a port.
 - **Default listen address**: Go uses `[::]` (IPv6 dual-stack) instead of upstream's `0.0.0.0` (IPv4 only) — better dual-stack support.
 - **Env var prefix**: Go uses `RESTIC_EXPORTER_` prefix on all exporter-specific env vars (e.g. `RESTIC_EXPORTER_LISTEN_PORT` instead of upstream's `LISTEN_PORT`) to avoid conflicts with other software.
+- **Grafana dashboard**: `grafana/restic-exporter.json` is no longer a mirror of upstream's `grafana_dashboard.json`. It intentionally drops the `Repository Check` panel (we do not export `restic_check_success`), adds a `Repository Stale Locks` panel for `restic_stale_locks_total`, and adds `datasource` and `instance` template variables so one dashboard can serve several exporters. Do **not** wholesale-copy the upstream dashboard over it — that already happened once in `69a2dfa` and silently reverted the panel removal from `e449fdf`. Port individual upstream panel changes instead.
 - **Additional metrics**: `restic_stale_locks_total` has no upstream equivalent. It is additive — no upstream metric is renamed, removed, or relabelled — so upstream dashboards and alert rules are unaffected. `restic_locks_total` stays unchanged for compatibility.
 - **Implementation details**: Concurrency model, error handling, JSON parsing, and code structure are all intentionally different. Only the Prometheus output and env var interface need to match.
