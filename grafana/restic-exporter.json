@@ -535,17 +535,16 @@
           "options": {
             "excludeByName": {
               "Time": true,
-              "backup_id": true,
-              "backup_type": true,
+              "__name__": true,
               "client_hostname": false,
-              "client_id": true,
-              "client_os_version": true,
               "client_username": true,
               "client_version": false,
               "instance": true,
               "job": true,
               "snapshot_hash": true,
-              "snapshot_id": true
+              "snapshot_paths": true,
+              "snapshot_tag": true,
+              "snapshot_tags": true
             },
             "indexByName": {},
             "renameByName": {
@@ -642,17 +641,15 @@
             "excludeByName": {
               "Time": true,
               "__name__": true,
-              "backup_id": true,
-              "backup_type": true,
               "client_hostname": false,
-              "client_id": true,
-              "client_os_version": true,
               "client_username": true,
               "client_version": true,
               "instance": true,
               "job": true,
               "snapshot_hash": true,
-              "snapshot_id": true
+              "snapshot_paths": true,
+              "snapshot_tag": true,
+              "snapshot_tags": true
             },
             "indexByName": {},
             "renameByName": {
@@ -785,11 +782,8 @@
               "Time 2": true,
               "__name__": true,
               "__name__ 1": true,
-              "backup_id": true,
-              "backup_type": true,
+              "__name__ 2": true,
               "client_hostname": false,
-              "client_id": true,
-              "client_os_version": true,
               "client_username": true,
               "client_username 1": true,
               "client_username 2": true,
@@ -805,7 +799,15 @@
               "snapshot_hash": true,
               "snapshot_hash 1": true,
               "snapshot_hash 2": true,
-              "snapshot_id": true
+              "snapshot_paths": true,
+              "snapshot_paths 1": true,
+              "snapshot_paths 2": true,
+              "snapshot_tag": true,
+              "snapshot_tag 1": true,
+              "snapshot_tag 2": true,
+              "snapshot_tags": true,
+              "snapshot_tags 1": true,
+              "snapshot_tags 2": true
             },
             "indexByName": {},
             "renameByName": {
@@ -894,12 +896,15 @@
             "excludeByName": {
               "Time": false,
               "__name__": true,
-              "backup_id": true,
               "client_hostname": false,
               "client_username": true,
+              "client_version": true,
               "instance": true,
               "job": true,
-              "snapshot_id": true
+              "snapshot_hash": true,
+              "snapshot_paths": true,
+              "snapshot_tag": true,
+              "snapshot_tags": true
             },
             "indexByName": {},
             "renameByName": {
