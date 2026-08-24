@@ -590,6 +590,20 @@ func updateResticMetrics(ctx context.Context, cfg config) error {
 	return nil
 }
 
+// newMetricsHandler refuses to serve until a refresh has succeeded. Values from
+// a refresh that failed describe a repository the exporter could not read, and a
+// zero lock count is indistinguishable from a healthy one.
+func newMetricsHandler(refreshErr *atomic.Pointer[string]) http.Handler {
+	handler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{Registry: registry})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if msg := refreshErr.Load(); msg != nil {
+			http.Error(w, *msg, http.StatusServiceUnavailable)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func activationListener() (net.Listener, error) {
 	if os.Getenv("LISTEN_PID") != fmt.Sprintf("%d", os.Getpid()) {
 		return nil, fmt.Errorf("expected LISTEN_PID=%d, but was %s", os.Getpid(), os.Getenv("LISTEN_PID"))
@@ -746,7 +760,10 @@ func run(args []string) int {
 		return 1
 	}
 
-	var ready atomic.Bool
+	var refreshErr atomic.Pointer[string]
+	initial := "Collecting initial metrics"
+	refreshErr.Store(&initial)
+
 	go func() {
 		ticker := time.NewTicker(time.Duration(cfg.RefreshInterval) * time.Second)
 		defer ticker.Stop()
@@ -754,20 +771,16 @@ func run(args []string) int {
 			slog.Info("Refreshing stats", "interval_seconds", cfg.RefreshInterval)
 			if err := updateResticMetrics(ctx, cfg); err != nil {
 				slog.Error("Unable to collect metrics from Restic", "error", err)
+				msg := err.Error()
+				refreshErr.Store(&msg)
+			} else {
+				refreshErr.Store(nil)
 			}
-			ready.Store(true)
 			<-ticker.C
 		}
 	}()
 
-	metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{Registry: registry})
-	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		if !ready.Load() {
-			http.Error(w, "Collecting initial metrics", http.StatusServiceUnavailable)
-			return
-		}
-		metricsHandler.ServeHTTP(w, r)
-	})
+	http.Handle("/metrics", newMetricsHandler(&refreshErr))
 
 	var ln net.Listener
 	var err error
