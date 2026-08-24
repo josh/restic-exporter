@@ -244,13 +244,10 @@ func getGlobalStats(ctx context.Context, repo *repository.Repository, snaps []*d
 
 	var totalSize, totalUncompressed, compressedSize, compressedUncompressed, blobCount uint64
 	repoVersion := repo.Config().Version
-	for bh := range blobs.Keys() {
-		pbs := repo.LookupBlob(bh.Type, bh.ID)
-		if len(pbs) == 0 {
-			slog.Warn("Blob not found in index, skipping", "blob", bh)
-			continue
+	if err := repo.ListBlobs(ctx, func(pb restic.PackedBlob) {
+		if !blobs.Has(pb.BlobHandle) {
+			return
 		}
-		pb := pbs[0]
 		totalSize += uint64(pb.Length)
 		if repoVersion >= 2 {
 			totalUncompressed += uint64(crypto.CiphertextLength(int(pb.DataLength())))
@@ -260,6 +257,8 @@ func getGlobalStats(ctx context.Context, repo *repository.Repository, snaps []*d
 			}
 		}
 		blobCount++
+	}); err != nil {
+		return globalStats{}, fmt.Errorf("error listing blobs: %w", err)
 	}
 
 	gs := globalStats{
