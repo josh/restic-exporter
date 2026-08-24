@@ -31,6 +31,9 @@ spec:
         {{- merge (include "restic-exporter.selectorLabels" . | fromYaml) (deepCopy (default dict .Values.podLabels)) | toYaml | nindent 8 }}
     spec:
       serviceAccountName: {{ include "restic-exporter.serviceAccountName" . }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
