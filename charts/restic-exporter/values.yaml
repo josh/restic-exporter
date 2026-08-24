@@ -29,8 +29,9 @@ exporter:
 
 extraEnv: []
 
-# restic's cache lives in an emptyDir mounted at /cache.
+# restic's cache lives in an emptyDir mounted at cache.path.
 cache:
+  path: /cache
   sizeLimit: ""
 
 service:
