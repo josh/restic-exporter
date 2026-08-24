@@ -39,7 +39,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-var version = "2.0.3"
+var version = "2.0.4"
 
 type config struct {
 	RefreshInterval int
