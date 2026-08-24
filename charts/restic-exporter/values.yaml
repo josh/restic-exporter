@@ -41,9 +41,11 @@ service:
 prometheusScrape: true
 
 # Requires the Prometheus Operator CRDs. The instance label is set to the release
-# name so several releases can share one dashboard.
+# name so several releases can share one dashboard. jobLabel names a Service label
+# to use for the Prometheus job; empty uses the Operator's Service-name default.
 serviceMonitor:
   enabled: false
+  jobLabel: app.kubernetes.io/name
   interval: ""
   scrapeTimeout: ""
   labels: {}

@@ -41,6 +41,7 @@ jobs:
           helm template test ./charts/restic-exporter \
             --set restic.repository=/repo \
             --set restic.existingSecret=restic \
+            --set prometheusScrape=false \
             --set serviceMonitor.enabled=true
 
       - name: Template chart with network policies
