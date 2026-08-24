@@ -28,6 +28,7 @@ exporter:
   verbose: false
 
 extraEnv: []
+extraEnvFrom: []
 
 cache:
   path: /cache
