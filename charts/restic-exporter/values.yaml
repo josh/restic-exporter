@@ -112,6 +112,7 @@ progressDeadlineSeconds: 600
 
 podAnnotations: {}
 podLabels: {}
+priorityClassName: ""
 nodeSelector: {}
 tolerations: []
 affinity: {}
