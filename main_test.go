@@ -455,6 +455,22 @@ func TestCacheDirFallback(t *testing.T) {
 	}
 }
 
+func TestCacheDirUnwritableFallback(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("directory permissions are not enforced for root")
+	}
+	applyEnv(t, initLocalResticRepo(t))
+	readOnlyDir := filepath.Join(t.TempDir(), "cache")
+	if err := os.Mkdir(readOnlyDir, 0o500); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	t.Setenv("RESTIC_CACHE_DIR", readOnlyDir)
+
+	if err := updateResticMetrics(context.Background(), config{}); err != nil {
+		t.Fatalf("updateResticMetrics() with an unwritable cache dir failed: %v", err)
+	}
+}
+
 func TestOpenRepositorySurfacesResticWarnings(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("directory permissions are not enforced for root")

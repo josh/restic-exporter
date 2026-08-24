@@ -157,7 +157,15 @@ func checkCacheDir(dir string) error {
 			return err
 		}
 	}
-	return os.MkdirAll(dir, 0o700)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	probe, err := os.CreateTemp(dir, "probe-")
+	if err != nil {
+		return err
+	}
+	_ = probe.Close()
+	return os.Remove(probe.Name())
 }
 
 func openRepository(ctx context.Context) (*repository.Repository, error) {
