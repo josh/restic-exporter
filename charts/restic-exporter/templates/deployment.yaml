@@ -66,9 +66,19 @@ spec:
             - name: http
               containerPort: 9183
               protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
           readinessProbe:
             httpGet:
-              path: /metrics
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
               port: http
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
