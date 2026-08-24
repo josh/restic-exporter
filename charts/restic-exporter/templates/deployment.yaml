@@ -101,7 +101,9 @@ spec:
             {{- end }}
       volumes:
         - name: cache
-          {{- with .Values.cache.sizeLimit }}
+          {{- with .Values.cache.volumeSource }}
+          {{- toYaml . | nindent 10 }}
+          {{- else with .Values.cache.sizeLimit }}
           emptyDir:
             sizeLimit: {{ . }}
           {{- else }}

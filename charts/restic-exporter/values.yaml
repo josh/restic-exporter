@@ -29,10 +29,10 @@ exporter:
 
 extraEnv: []
 
-# restic's cache lives in an emptyDir mounted at cache.path.
 cache:
   path: /cache
   sizeLimit: ""
+  volumeSource: {}
 
 service:
   type: ClusterIP

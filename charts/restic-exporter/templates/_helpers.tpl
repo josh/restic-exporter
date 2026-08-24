@@ -62,6 +62,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and .Values.restic.ageIdentity.enabled (not (include "restic-exporter.ageIdentitySecretName" .)) -}}
 {{- fail "restic.ageIdentity.enabled needs restic.ageIdentity.existingSecret or restic.existingSecret" -}}
 {{- end -}}
+{{- if and .Values.cache.sizeLimit .Values.cache.volumeSource -}}
+{{- fail "set only one of cache.sizeLimit or cache.volumeSource" -}}
+{{- end -}}
 {{- if and .Values.networkPolicy.ingress.enabled (not .Values.networkPolicy.ingress.from) -}}
 {{- fail "networkPolicy.ingress.enabled needs the peers scraping metrics; set networkPolicy.ingress.from" -}}
 {{- end -}}
