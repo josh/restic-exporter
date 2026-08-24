@@ -46,7 +46,7 @@ All three must pass with no errors and no formatting changes.
 
 ## Building
 
-The `version` variable in `main.go` is updated manually each release. It can also be overridden at build time via `-ldflags` to include more specific information like the current git tag:
+The `version` variable in `main.go` is updated manually each release, together with `version` and `appVersion` in `charts/restic-exporter/Chart.yaml`. It can also be overridden at build time via `-ldflags` to include more specific information like the current git tag:
 
 ```sh
 go build -ldflags "-X main.version=$(git describe --tags)" ./...

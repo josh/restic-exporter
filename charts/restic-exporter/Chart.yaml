@@ -1,0 +1,18 @@
+apiVersion: v2
+name: restic-exporter
+description: Prometheus exporter for restic repositories
+type: application
+version: "1.0.4"
+appVersion: "1.0.4"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/josh/restic-exporter
+sources:
+  - https://github.com/josh/restic-exporter
+keywords:
+  - restic
+  - backup
+  - prometheus
+  - exporter
+  - metrics
+maintainers:
+  - name: Joshua Peek

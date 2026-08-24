@@ -99,6 +99,30 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
+## Helm
+
+The chart in [`charts/restic-exporter`](charts/restic-exporter) runs the exporter as a Deployment with a ClusterIP Service, plus an optional ServiceMonitor and NetworkPolicies. Each release monitors one repository, so install it once per repository.
+
+Create a Secret holding `RESTIC_PASSWORD` and any backend credentials — the chart only references existing Secrets:
+
+```sh
+kubectl create secret generic home-restic \
+  --from-literal=RESTIC_PASSWORD=... \
+  --from-literal=AWS_ACCESS_KEY_ID=... \
+  --from-literal=AWS_SECRET_ACCESS_KEY=...
+```
+
+Then install:
+
+```sh
+helm upgrade --install home ./charts/restic-exporter \
+  --set restic.repository=s3:s3.amazonaws.com/bucket/home \
+  --set restic.existingSecret=home-restic \
+  --set serviceMonitor.enabled=true
+```
+
+`serviceMonitor.enabled` requires the Prometheus Operator CRDs and sets the `instance` label to the release name (`home` above), so the [Grafana dashboard](grafana/restic-exporter.json) can switch between releases. `networkPolicy.ingress` and `networkPolicy.egress` are off by default; see [`values.yaml`](charts/restic-exporter/values.yaml) for all options.
+
 ## Credits
 
 Based on [ngosang/restic-exporter](https://github.com/ngosang/restic-exporter) by [@ngosang](https://github.com/ngosang). Metric names, labels, and exporter design originate from that project.
