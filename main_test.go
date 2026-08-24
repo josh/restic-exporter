@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -348,6 +349,84 @@ func TestZeroByteLockCounted(t *testing.T) {
 	}
 	if got, _ := metricValue(t, "restic_stale_locks_total", nil); got != 0 {
 		t.Fatalf("restic_stale_locks_total = %v, want 0", got)
+	}
+}
+
+func TestMetricsHandlerFailsUntilRefreshSucceeds(t *testing.T) {
+	applyEnv(t, initLocalResticRepo(t))
+	if err := updateResticMetrics(context.Background(), config{}); err != nil {
+		t.Fatalf("updateResticMetrics() failed: %v", err)
+	}
+
+	var refreshErr atomic.Pointer[string]
+	failure := "unable to open repository"
+	refreshErr.Store(&failure)
+	handler := newMetricsHandler(&refreshErr)
+
+	get := func() *httptest.ResponseRecorder {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		return rec
+	}
+
+	rec := get()
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d while the last refresh failed", rec.Code, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(rec.Body.String(), failure) {
+		t.Fatalf("body = %q, want the refresh error", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "restic_locks_total") {
+		t.Fatalf("failed refresh must not serve metrics, got:\n%s", rec.Body.String())
+	}
+
+	refreshErr.Store(nil)
+	rec = get()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d after a successful refresh", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "restic_locks_total") {
+		t.Fatalf("expected metrics after a successful refresh, got:\n%s", rec.Body.String())
+	}
+}
+
+func TestHealthzIsIndependentOfRefreshState(t *testing.T) {
+	var refreshErr atomic.Pointer[string]
+	failure := "unable to open repository"
+	refreshErr.Store(&failure)
+	handler := newHealthzHandler()
+
+	for _, state := range []string{"failed", "succeeded"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d with a %s refresh, want %d", rec.Code, state, http.StatusOK)
+		}
+		refreshErr.Store(nil)
+	}
+}
+
+func TestReadyzFailsUntilRefreshSucceeds(t *testing.T) {
+	var refreshErr atomic.Pointer[string]
+	failure := "unable to open repository"
+	refreshErr.Store(&failure)
+	handler := newReadyzHandler(&refreshErr)
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d while the last refresh failed, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(rec.Body.String(), failure) {
+		t.Fatalf("body = %q, want the refresh error", rec.Body.String())
+	}
+
+	refreshErr.Store(nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d after a successful refresh, want %d", rec.Code, http.StatusOK)
 	}
 }
 
