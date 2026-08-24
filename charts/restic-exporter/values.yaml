@@ -105,6 +105,8 @@ startupProbe:
   periodSeconds: 10
   failureThreshold: 60
 
+strategy: {}
+
 podAnnotations: {}
 podLabels: {}
 nodeSelector: {}
