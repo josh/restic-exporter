@@ -108,6 +108,8 @@ startupProbe:
 
 strategy: {}
 
+progressDeadlineSeconds: 600
+
 podAnnotations: {}
 podLabels: {}
 nodeSelector: {}
