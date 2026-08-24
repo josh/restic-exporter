@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -797,6 +798,7 @@ func run(args []string) int {
 			} else {
 				refreshErr.Store(nil)
 			}
+			debug.FreeOSMemory()
 			<-ticker.C
 		}
 	}()
