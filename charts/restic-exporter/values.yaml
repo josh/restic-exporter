@@ -101,6 +101,10 @@ resources:
   limits:
     memory: 512Mi
 
+startupProbe:
+  periodSeconds: 10
+  failureThreshold: 60
+
 podAnnotations: {}
 podLabels: {}
 nodeSelector: {}
