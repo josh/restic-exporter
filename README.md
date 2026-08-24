@@ -41,6 +41,21 @@ Instead of running a persistent HTTP server, you can collect metrics once and ou
 ./restic-exporter -output http://prometheus:9090/api/v1/import/prometheus
 ```
 
+## Docker
+
+Multi-arch images (`linux/amd64`, `linux/arm64`) are published to `ghcr.io/josh/restic-exporter`, tagged with the release version and `latest`:
+
+```sh
+docker run --rm -p 9183:9183 \
+  -e RESTIC_REPOSITORY=s3:s3.amazonaws.com/bucket/repo \
+  -e RESTIC_PASSWORD=... \
+  -e AWS_ACCESS_KEY_ID=... \
+  -e AWS_SECRET_ACCESS_KEY=... \
+  ghcr.io/josh/restic-exporter
+```
+
+The image runs as an unprivileged user and keeps the restic cache in `/cache`; mount a volume there to keep it across restarts.
+
 ## Configuration
 
 Configuration comes from environment variables and can be overridden by CLI flags.
@@ -76,7 +91,7 @@ The following standard restic environment variables are also honored: `RESTIC_KE
 | `NO_CHECK`, `NO_STATS`, `NO_LOCKS` flags | supported               | removed (stats and locks are always collected) |
 | CLI flags                                | not available           | available for all options                      |
 | Oneshot output mode                      | not available           | `-output` flag                                 |
-| Docker image                             | available               | not available                                  |
+| Docker image                             | available               | available                                      |
 
 ## systemd
 
