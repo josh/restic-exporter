@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -451,6 +452,34 @@ func TestCacheDirFallback(t *testing.T) {
 
 	if err := updateResticMetrics(context.Background(), config{}); err != nil {
 		t.Fatalf("updateResticMetrics() with an unusable cache dir failed: %v", err)
+	}
+}
+
+func TestOpenRepositorySurfacesResticWarnings(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("directory permissions are not enforced for root")
+	}
+	applyEnv(t, initLocalResticRepo(t))
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	if err := os.Mkdir(cacheDir, 0o300); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(cacheDir, 0o700) })
+	t.Setenv("RESTIC_CACHE_DIR", cacheDir)
+
+	var buf strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	repo, err := openRepository(context.Background())
+	if err != nil {
+		t.Fatalf("openRepository() failed: %v", err)
+	}
+	defer func() { _ = repo.Close() }()
+
+	if !strings.Contains(buf.String(), "old cache directories") {
+		t.Fatalf("expected restic cache warning to reach slog, got: %q", buf.String())
 	}
 }
 

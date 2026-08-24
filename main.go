@@ -187,7 +187,7 @@ func openRepository(ctx context.Context) (*repository.Repository, error) {
 	}
 	gopts.TLSClientCertKeyFilename = os.Getenv("RESTIC_TLS_CLIENT_CERT")
 	gopts.HTTPUserAgent = os.Getenv("RESTIC_HTTP_USER_AGENT")
-	return global.OpenRepository(ctx, gopts, &progress.NoopPrinter{})
+	return global.OpenRepository(ctx, gopts, &slogPrinter{})
 }
 
 func getSnapshots(ctx context.Context, repo *repository.Repository) ([]*data.Snapshot, error) {
