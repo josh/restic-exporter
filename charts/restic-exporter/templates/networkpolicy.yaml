@@ -17,7 +17,7 @@ spec:
         {{- toYaml .Values.networkPolicy.ingress.from | nindent 8 }}
       ports:
         - protocol: TCP
-          port: 9183
+          port: {{ include "restic-exporter.containerPort" . }}
 {{- end }}
 {{- if and .Values.networkPolicy.ingress.enabled .Values.networkPolicy.egress.enabled }}
 ---
