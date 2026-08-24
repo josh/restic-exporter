@@ -63,10 +63,15 @@ spec:
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .Values.restic.existingSecret }}
+          {{- if or .Values.restic.existingSecret .Values.extraEnvFrom }}
           envFrom:
+            {{- with .Values.restic.existingSecret }}
             - secretRef:
                 name: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           ports:
             - name: http
