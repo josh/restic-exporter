@@ -42,6 +42,8 @@ spec:
             - name: RESTIC_REPOSITORY
               value: {{ . | quote }}
             {{- end }}
+            - name: RESTIC_CACHE_DIR
+              value: {{ .Values.cache.path | quote }}
             - name: RESTIC_EXPORTER_REFRESH_INTERVAL
               value: {{ .Values.exporter.refreshInterval | quote }}
             - name: RESTIC_EXPORTER_INCLUDE_PATHS
@@ -74,7 +76,7 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: cache
-              mountPath: /cache
+              mountPath: {{ .Values.cache.path | quote }}
             {{- if .Values.restic.ageIdentity.enabled }}
             - name: age-identity
               mountPath: {{ .Values.restic.ageIdentity.mountPath | quote }}
