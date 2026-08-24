@@ -9,6 +9,9 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
+  {{- with .Values.serviceMonitor.jobLabel }}
+  jobLabel: {{ . | quote }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "restic-exporter.selectorLabels" . | nindent 6 }}
