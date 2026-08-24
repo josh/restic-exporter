@@ -17,7 +17,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "restic-exporter.selectorLabels" . | nindent 8 }}
+        {{- merge (include "restic-exporter.selectorLabels" . | fromYaml) (deepCopy (default dict .Values.podLabels)) | toYaml | nindent 8 }}
     spec:
       serviceAccountName: {{ include "restic-exporter.serviceAccountName" . }}
       automountServiceAccountToken: false
