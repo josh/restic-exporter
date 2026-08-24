@@ -1,0 +1,111 @@
+{{- include "restic-exporter.validate" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "restic-exporter.fullname" . }}
+  labels:
+    {{- include "restic-exporter.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "restic-exporter.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "restic-exporter.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "restic-exporter.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: restic-exporter
+          image: {{ include "restic-exporter.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            # An empty address binds dual-stack with an IPv4 fallback; the default "[::]" needs IPv6.
+            - -listen-address=
+            {{- if .Values.exporter.verbose }}
+            - -verbose
+            {{- end }}
+          env:
+            {{- with .Values.restic.repository }}
+            - name: RESTIC_REPOSITORY
+              value: {{ . | quote }}
+            {{- end }}
+            - name: RESTIC_EXPORTER_REFRESH_INTERVAL
+              value: {{ .Values.exporter.refreshInterval | quote }}
+            - name: RESTIC_EXPORTER_INCLUDE_PATHS
+              value: {{ .Values.exporter.includePaths | quote }}
+            {{- if .Values.restic.ageIdentity.enabled }}
+            - name: RESTIC_AGE_IDENTITY_FILE
+              value: {{ .Values.restic.ageIdentity.mountPath | quote }}
+            - name: RESTIC_PASSWORD_COMMAND
+              value: restic-age-key password
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.restic.existingSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ . | quote }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 9183
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+            {{- if .Values.restic.ageIdentity.enabled }}
+            - name: age-identity
+              mountPath: {{ .Values.restic.ageIdentity.mountPath | quote }}
+              subPath: identity
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: cache
+          {{- with .Values.cache.sizeLimit }}
+          emptyDir:
+            sizeLimit: {{ . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if .Values.restic.ageIdentity.enabled }}
+        - name: age-identity
+          secret:
+            secretName: {{ include "restic-exporter.ageIdentitySecretName" . | quote }}
+            items:
+              - key: {{ .Values.restic.ageIdentity.secretKey }}
+                path: identity
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

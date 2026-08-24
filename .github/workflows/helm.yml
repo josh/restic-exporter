@@ -1,0 +1,54 @@
+name: Helm
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Helm
+        run: |
+          curl --fail --silent --show-error --location --output get-helm.sh https://raw.githubusercontent.com/helm/helm/bc0114c70841e2a05c95e53e20358fb761dbfb2e/scripts/get-helm-4
+          bash get-helm.sh --version "v${HELM_VERSION}"
+        env:
+          HELM_VERSION: "4.2.4"
+
+      - name: Lint chart
+        run: |
+          helm lint ./charts/restic-exporter \
+            --set restic.repository=/repo \
+            --set restic.existingSecret=restic
+
+      - name: Template chart
+        run: |
+          helm template test ./charts/restic-exporter \
+            --set restic.repository=/repo \
+            --set restic.existingSecret=restic
+
+      - name: Template chart with age identity
+        run: |
+          helm template test ./charts/restic-exporter \
+            --set restic.repository=/repo \
+            --set restic.existingSecret=restic \
+            --set restic.ageIdentity.enabled=true
+
+      - name: Template chart with ServiceMonitor
+        run: |
+          helm template test ./charts/restic-exporter \
+            --set restic.repository=/repo \
+            --set restic.existingSecret=restic \
+            --set serviceMonitor.enabled=true
+
+      - name: Template chart with network policies
+        run: |
+          helm template test ./charts/restic-exporter \
+            --set restic.repository=/repo \
+            --set restic.existingSecret=restic \
+            --set networkPolicy.ingress.enabled=true \
+            --set-json 'networkPolicy.ingress.from=[{"podSelector":{}}]' \
+            --set networkPolicy.egress.enabled=true \
+            --set-json 'networkPolicy.egress.repository.to=[{"ipBlock":{"cidr":"10.0.0.0/8"}}]'
