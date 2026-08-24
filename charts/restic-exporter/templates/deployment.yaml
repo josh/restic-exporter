@@ -12,9 +12,15 @@ spec:
       {{- include "restic-exporter.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      {{- if or .Values.prometheusScrape .Values.podAnnotations }}
       annotations:
+        {{- if .Values.prometheusScrape }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ include "restic-exporter.containerPort" . | quote }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       labels:
         {{- merge (include "restic-exporter.selectorLabels" . | fromYaml) (deepCopy (default dict .Values.podLabels)) | toYaml | nindent 8 }}
@@ -64,7 +70,7 @@ spec:
           {{- end }}
           ports:
             - name: http
-              containerPort: 9183
+              containerPort: {{ include "restic-exporter.containerPort" . }}
               protocol: TCP
           startupProbe:
             httpGet:

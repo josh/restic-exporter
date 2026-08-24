@@ -47,6 +47,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "restic-exporter.containerPort" -}}
+9183
+{{- end -}}
+
 {{- define "restic-exporter.ageIdentitySecretName" -}}
 {{- .Values.restic.ageIdentity.existingSecret | default .Values.restic.existingSecret -}}
 {{- end -}}

@@ -136,7 +136,7 @@ helm upgrade --install home ./charts/restic-exporter \
   --set serviceMonitor.enabled=true
 ```
 
-`serviceMonitor.enabled` requires the Prometheus Operator CRDs and sets the `instance` label to the release name (`home` above), so the [Grafana dashboard](grafana/restic-exporter.json) can switch between releases. `networkPolicy.ingress` and `networkPolicy.egress` are off by default; see [`values.yaml`](charts/restic-exporter/values.yaml) for all options.
+`prometheusScrape` adds `prometheus.io/scrape` and `prometheus.io/port` pod annotations, for scrape jobs that discover targets by annotation. It is on by default; set it to `false` when scraping by ServiceMonitor instead, or the target is scraped twice. `serviceMonitor.enabled` requires the Prometheus Operator CRDs and sets the `instance` label to the release name (`home` above), so the [Grafana dashboard](grafana/restic-exporter.json) can switch between releases. `networkPolicy.ingress` and `networkPolicy.egress` are off by default; see [`values.yaml`](charts/restic-exporter/values.yaml) for all options.
 
 ## Credits
 

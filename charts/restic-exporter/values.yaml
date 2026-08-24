@@ -38,6 +38,8 @@ service:
   type: ClusterIP
   port: 9183
 
+prometheusScrape: true
+
 # Requires the Prometheus Operator CRDs. The instance label is set to the release
 # name so several releases can share one dashboard.
 serviceMonitor:
