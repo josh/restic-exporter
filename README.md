@@ -43,15 +43,16 @@ Instead of running a persistent HTTP server, you can collect metrics once and ou
 
 ## Docker
 
-Multi-arch images (`linux/amd64`, `linux/arm64`) are published to `ghcr.io/josh/restic-exporter`, tagged with the release version and `latest`:
+Build the image from the included `Dockerfile`:
 
 ```sh
+docker build -t restic-exporter .
 docker run --rm -p 9183:9183 \
   -e RESTIC_REPOSITORY=s3:s3.amazonaws.com/bucket/repo \
   -e RESTIC_PASSWORD=... \
   -e AWS_ACCESS_KEY_ID=... \
   -e AWS_SECRET_ACCESS_KEY=... \
-  ghcr.io/josh/restic-exporter
+  restic-exporter
 ```
 
 The image runs as an unprivileged user and keeps the restic cache in `/cache`; mount a volume there to keep it across restarts.
@@ -91,7 +92,7 @@ The following standard restic environment variables are also honored: `RESTIC_KE
 | `NO_CHECK`, `NO_STATS`, `NO_LOCKS` flags | supported               | removed (stats and locks are always collected) |
 | CLI flags                                | not available           | available for all options                      |
 | Oneshot output mode                      | not available           | `-output` flag                                 |
-| Docker image                             | available               | available                                      |
+| Docker image                             | available               | build from `Dockerfile`                        |
 
 ## systemd
 

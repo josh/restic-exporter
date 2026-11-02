@@ -52,7 +52,7 @@ The `version` variable in `main.go` is updated manually each release, together w
 go build -ldflags "-X main.version=$(git describe --tags)" ./...
 ```
 
-`Dockerfile` builds the image published to `ghcr.io/josh/restic-exporter` by `.github/workflows/release.yml` on `v*` tags.
+`Dockerfile` builds the container image.
 
 ## Comments
 
