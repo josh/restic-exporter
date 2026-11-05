@@ -4,9 +4,12 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   lint:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-amd64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -15,7 +18,8 @@ jobs:
           curl --fail --silent --show-error --location --output get-helm.sh https://raw.githubusercontent.com/helm/helm/bc0114c70841e2a05c95e53e20358fb761dbfb2e/scripts/get-helm-4
           bash get-helm.sh --version "v${HELM_VERSION}"
         env:
-          HELM_VERSION: "4.2.4"
+          # renovate: datasource=github-releases depName=helm/helm extractVersion=^v(?<version>.+)$
+          HELM_VERSION: "4.3.1"
 
       - name: Lint chart
         run: |
