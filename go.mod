@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/prometheus/client_golang v1.25.0
-	github.com/prometheus/common v0.73.0
+	github.com/prometheus/common v0.73.1
 )
 
 require (
@@ -45,7 +45,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.16 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
-	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.20.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
@@ -56,7 +55,7 @@ require (
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go/v7 v7.1.0 // indirect
 	github.com/ncw/swift/v2 v2.0.5 // indirect
-	github.com/pandatix/go-abnf v0.5.1 // indirect
+	github.com/pandatix/go-abnf v0.5.3 // indirect
 	github.com/peterbourgon/unixtransport v0.0.7 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
